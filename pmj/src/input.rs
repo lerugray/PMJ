@@ -331,9 +331,13 @@ fn handle_move_select_dest(game: &mut GameState, key: KeyEvent, unit_idx: usize)
                 game.cursor = 0;
             } else {
                 let dest = neighbors[game.cursor];
-                game.move_unit(unit_idx, dest);
-                game.screen = Screen::PhaseMenu;
-                game.cursor = 0;
+                // Only attempt move if valid (enough MP, no enemy)
+                if game.can_move(unit_idx, dest).is_ok() {
+                    game.move_unit(unit_idx, dest);
+                    game.screen = Screen::PhaseMenu;
+                    game.cursor = 0;
+                }
+                // Invalid moves are silently ignored (menu shows ✗ marker)
             }
         }
         KeyCode::Esc => {

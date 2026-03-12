@@ -953,7 +953,7 @@ fn draw_contact_confirm(
 
 fn draw_contact_result(
     f: &mut Frame,
-    game: &GameState,
+    _game: &GameState,
     area: Rect,
     outcome: &crate::combat::ContactOutcome,
     _target_loc: Location,

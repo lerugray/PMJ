@@ -894,7 +894,7 @@ impl GameState {
             .units
             .iter()
             .enumerate()
-            .find(|(_, u)| u.side == Side::Russia && !u.is_on_map() && u.has_reduced_side)
+            .find(|(_, u)| u.side == Side::Russia && !u.is_on_map() && !u.dispersed && u.has_reduced_side)
             .map(|(i, _)| i)
         {
             let name = self.units[idx].id.name().to_string();
@@ -912,7 +912,7 @@ impl GameState {
             .units
             .iter()
             .enumerate()
-            .find(|(_, u)| u.side == Side::Russia && !u.is_on_map())
+            .find(|(_, u)| u.side == Side::Russia && !u.is_on_map() && !u.dispersed)
             .map(|(i, _)| i)
         {
             let name = self.units[idx].id.name().to_string();
@@ -983,8 +983,6 @@ impl GameState {
     // ── 7.4 Russian AI Priority Table ────────────────────────────────────
 
     fn run_russian_ai_attacks(&mut self) {
-        use rand::Rng;
-
         // Gather Russian units on map that can attack (not police)
         let russian_attackers: Vec<usize> = self
             .units
