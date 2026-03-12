@@ -105,6 +105,8 @@ pub struct GameState {
     pub wagner_reduced_this_turn: bool,
     pub wagner_eliminated_this_turn: bool,
     pub admin_units_adjusted: [bool; 3], // Track which Wagner units had MCT adjusted
+    pub frame_count: u64, // Animation frame counter (incremented every tick)
+    pub prev_screen: Option<Box<Screen>>, // For returning from help/overlays
 }
 
 const WAGNER_IDS: [UnitId; 3] = [UnitId::Rusich, UnitId::Utkin, UnitId::Serb];
@@ -145,6 +147,8 @@ impl GameState {
             wagner_reduced_this_turn: false,
             wagner_eliminated_this_turn: false,
             admin_units_adjusted: [false; 3],
+            frame_count: 0,
+            prev_screen: None,
         }
     }
 

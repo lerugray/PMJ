@@ -29,11 +29,10 @@
 - [x] Key input fix (Press only, no Release/Repeat on Windows)
 - [x] Full-screen title and game over screens
 - [x] Map rework — full-name boxed labels, spread-out layout matching board
-- [ ] **Title screen overhaul** — flashy ASCII art, Russian flags, theme (reference Veridian Contraption)
+- [x] Animated title screen — block-letter art, Russian flags, fade-in, noise
+- [x] Continuous movement — stay in move mode until MP exhausted or Esc
+- [x] Global ? help and Q quit from any screen
+- [x] Contextual phase guides — rules explanations on every major screen
 - [ ] Map position fine-tuning after playtesting
 - [ ] Sound or flash on combat results (if terminal supports it)
-
-## Uncommitted changes (need to commit + push)
-- app.rs: KeyEventKind::Press filter
-- ui.rs: full-screen title/gameover routing, phase menu hints, map label boxes
-- map.rs: new map_pos coordinates
+- [ ] Save/load game state

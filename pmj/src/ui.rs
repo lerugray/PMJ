@@ -30,7 +30,7 @@ const MOMENTUM_NEG: Color = Color::Rgb(200, 50, 50);     // Red
 pub fn draw(f: &mut Frame, game: &GameState) {
     // Title and Game Over screens are full-width
     if matches!(game.screen, Screen::Title) {
-        draw_title(f, f.area());
+        draw_title(f, f.area(), game.frame_count);
         return;
     }
     if let Screen::GameOver { wagner_wins } = game.screen {
@@ -527,7 +527,7 @@ fn draw_roster(f: &mut Frame, game: &GameState, area: Rect) {
 
 fn draw_content(f: &mut Frame, game: &GameState, area: Rect) {
     match &game.screen {
-        Screen::Title => draw_title(f, area),
+        Screen::Title => draw_title(f, area, game.frame_count),
         Screen::MctSelect => draw_mct_select_menu(f, game, area),
         Screen::MctAdjust(idx) => draw_mct_adjust_menu(f, game, area, *idx),
         Screen::PhaseMenu => draw_phase_menu(f, game, area),
@@ -602,61 +602,304 @@ fn draw_menu(f: &mut Frame, title: &str, labels: &[String], cursor: usize, area:
 
 // ── Screen-specific draws ────────────────────────────────────────────────
 
-fn draw_title(f: &mut Frame, area: Rect) {
-    let title_art = vec![
-        "",
-        "  ╔═══════════════════════════════════════════════╗",
-        "  ║                                               ║",
-        "  ║    P R I G O Z H I N ' S                      ║",
-        "  ║        M A R C H   O F   J U S T I C E        ║",
-        "  ║                                               ║",
-        "  ║    A solitaire wargame by Ray Weiss           ║",
-        "  ║    Published by Conflict Simulations Ltd.     ║",
-        "  ║                                               ║",
-        "  ║    June 23, 2023 — The March on Moscow        ║",
-        "  ║                                               ║",
-        "  ╚═══════════════════════════════════════════════╝",
-        "",
-        "         Wagner forces stand in Rostov-On-Don.",
-        "      The road to Moscow lies open before them.",
-        "",
-        "          \"The people are silent.\"",
-        "                     — Pushkin, Boris Godunov",
-        "",
-        "",
-        "              Press ENTER to begin",
-        "                Press Q to quit",
-    ];
+// ── Title Screen — animated, Russian-themed ─────────────────────────────
 
-    let lines: Vec<Line> = title_art
-        .iter()
-        .enumerate()
-        .map(|(i, &text)| {
-            let style = if i >= 2 && i <= 11 {
-                // Title box
-                if text.contains("P R I G") || text.contains("M A R C H") {
-                    Style::default().fg(WAGNER_COLOR).add_modifier(Modifier::BOLD)
-                } else if text.contains("Ray Weiss") || text.contains("Conflict") {
-                    Style::default().fg(Color::White)
-                } else {
-                    Style::default().fg(HIGHLIGHT)
-                }
-            } else if text.contains("Pushkin") {
-                Style::default().fg(DIM).add_modifier(Modifier::ITALIC)
-            } else if text.contains("people are silent") {
-                Style::default().fg(Color::White).add_modifier(Modifier::ITALIC)
-            } else if text.contains("Press") {
-                Style::default().fg(HIGHLIGHT)
+// Block letters (5 rows tall) for title text
+const L_P: [&str; 5] = ["████ ", "█   █", "████ ", "█    ", "█    "];
+const L_R: [&str; 5] = ["████ ", "█   █", "████ ", "█  █ ", "█   █"];
+const L_I: [&str; 5] = ["█████", "  █  ", "  █  ", "  █  ", "█████"];
+const L_G: [&str; 5] = [" ████", "█    ", "█  ██", "█   █", " ████"];
+const L_O: [&str; 5] = [" ███ ", "█   █", "█   █", "█   █", " ███ "];
+const L_Z: [&str; 5] = ["█████", "   █ ", "  █  ", " █   ", "█████"];
+const L_H: [&str; 5] = ["█   █", "█   █", "█████", "█   █", "█   █"];
+const L_N: [&str; 5] = ["█   █", "██  █", "█ █ █", "█  ██", "█   █"];
+const L_APOS: [&str; 5] = ["█", "█", " ", " ", " "];
+const L_S: [&str; 5] = [" ████", "█    ", " ███ ", "    █", "████ "];
+const L_M: [&str; 5] = ["█   █", "██ ██", "█ █ █", "█   █", "█   █"];
+const L_A: [&str; 5] = [" ███ ", "█   █", "█████", "█   █", "█   █"];
+const L_C: [&str; 5] = [" ████", "█    ", "█    ", "█    ", " ████"];
+const L_J: [&str; 5] = ["█████", "   █ ", "   █ ", "█  █ ", " ██  "];
+const L_U: [&str; 5] = ["█   █", "█   █", "█   █", "█   █", " ███ "];
+const L_T: [&str; 5] = ["█████", "  █  ", "  █  ", "  █  ", "  █  "];
+const L_E: [&str; 5] = ["█████", "█    ", "████ ", "█    ", "█████"];
+const L_F: [&str; 5] = ["█████", "█    ", "████ ", "█    ", "█    "];
+const L_SPC: [&str; 5] = ["   ", "   ", "   ", "   ", "   "]; // word separator
+
+fn compose_word(letters: &[&[&str; 5]], gap: &str) -> Vec<String> {
+    (0..5).map(|row| {
+        letters.iter().map(|l| l[row]).collect::<Vec<_>>().join(gap)
+    }).collect()
+}
+
+/// Fade factor: ramps 0.0→1.0 over `duration` frames starting at `start_frame`.
+fn fade_factor(frame: u64, start: u64, duration: u64) -> f64 {
+    if frame < start { return 0.0; }
+    let elapsed = frame - start;
+    if elapsed >= duration { 1.0 } else { elapsed as f64 / duration as f64 }
+}
+
+/// Center x position for a string within an area (using char count, not byte length).
+fn center_x(area: &Rect, text: &str) -> u16 {
+    area.left() + (area.width.saturating_sub(text.chars().count() as u16)) / 2
+}
+
+/// Dim an RGB color toward black by a factor (0.0 = black, 1.0 = full color).
+fn dim_rgb(r: u8, g: u8, b: u8, factor: f64) -> Color {
+    Color::Rgb(
+        (r as f64 * factor) as u8,
+        (g as f64 * factor) as u8,
+        (b as f64 * factor) as u8,
+    )
+}
+
+fn draw_title(f: &mut Frame, area: Rect, frame_count: u64) {
+    let buf = f.buffer_mut();
+
+    // ── Background noise (sparse drifting dots) ──────────────────────
+    let noise_chars = ['·', '.', ':', '°', '∙'];
+    let bg_fade = fade_factor(frame_count, 0, 15);
+    for y in area.top()..area.bottom() {
+        for x in area.left()..area.right() {
+            // Deterministic pseudo-random hash that drifts slowly
+            let seed = (x as u64).wrapping_mul(31)
+                ^ (y as u64).wrapping_mul(97)
+                ^ (frame_count / 5).wrapping_mul(13);
+            let hash = seed.wrapping_mul(2654435761) >> 56;
+            if hash < 7 { // ~3% coverage
+                let ch = noise_chars[(hash as usize) % noise_chars.len()];
+                let cell = &mut buf[(x, y)];
+                cell.set_char(ch);
+                cell.set_style(Style::default().fg(dim_rgb(30, 30, 40, bg_fade)));
+            }
+        }
+    }
+
+    // ── Russian flag stripe at top ───────────────────────────────────
+    let stripe_fade = fade_factor(frame_count, 0, 20);
+    let stripe_w = area.width as usize;
+    let third = stripe_w / 3;
+    if area.height > 2 {
+        let y = area.top();
+        for x in area.left()..area.right() {
+            let rel = (x - area.left()) as usize;
+            let (r, g, b) = if rel < third {
+                (220, 220, 220) // white
+            } else if rel < third * 2 {
+                (0, 57, 166)    // blue
             } else {
-                Style::default().fg(Color::White)
+                (213, 43, 30)   // red
             };
-            Line::from(Span::styled(text.to_string(), style))
-        })
-        .collect();
+            let cell = &mut buf[(x, y)];
+            cell.set_char('▀');
+            cell.set_style(Style::default().fg(dim_rgb(r, g, b, stripe_fade)));
+        }
+    }
 
-    let block = Block::default().borders(Borders::ALL).border_style(Style::default().fg(DIM));
-    let p = Paragraph::new(lines).block(block);
-    f.render_widget(p, area);
+    // ── Build block-letter title: PRIGOZHIN'S ────────────────────────
+    let prigozhin = compose_word(
+        &[&L_P, &L_R, &L_I, &L_G, &L_O, &L_Z, &L_H, &L_I, &L_N, &L_APOS, &L_S],
+        " ",
+    );
+    let title_w = prigozhin[0].chars().count();
+
+    // ── Compute vertical layout ──────────────────────────────────────
+    let cy = area.top() + area.height / 2; // vertical center
+    let title_start_y = cy.saturating_sub(18);
+
+    // ── Render PRIGOZHIN'S (block letters) ───────────────────────────
+    let title_fade = fade_factor(frame_count, 6, 18);
+    // Color-cycle: pulse between Wagner red and gold
+    let phase = (frame_count as f64 * 0.03).sin();
+    let title_r = (200.0 + 55.0 * phase) as u8;
+    let title_g = (50.0 + 30.0 * phase) as u8;
+    let title_b = 30;
+    let title_color = dim_rgb(title_r, title_g, title_b, title_fade);
+
+    for (row, line) in prigozhin.iter().enumerate() {
+        let y = title_start_y + 2 + row as u16;
+        if y >= area.bottom() { break; }
+        let x_start = area.left() + (area.width.saturating_sub(title_w as u16)) / 2;
+        for (col, ch) in line.chars().enumerate() {
+            let x = x_start + col as u16;
+            if x >= area.right() { continue; }
+            if ch != ' ' {
+                let cell = &mut buf[(x, y)];
+                cell.set_char(ch);
+                cell.set_style(Style::default().fg(title_color));
+            }
+        }
+    }
+
+    // ── MARCH OF JUSTICE subtitle (block letters, two lines) ────────
+    let march_of = compose_word(
+        &[&L_M, &L_A, &L_R, &L_C, &L_H, &L_SPC, &L_O, &L_F],
+        " ",
+    );
+    let justice = compose_word(
+        &[&L_J, &L_U, &L_S, &L_T, &L_I, &L_C, &L_E],
+        " ",
+    );
+    let sub_fade = fade_factor(frame_count, 18, 15);
+    let sub_color = dim_rgb(220, 200, 100, sub_fade);
+
+    // "MARCH OF" line
+    let march_w = march_of[0].chars().count();
+    for (row, line) in march_of.iter().enumerate() {
+        let y = title_start_y + 9 + row as u16;
+        if y >= area.bottom() { break; }
+        let x_start = area.left() + (area.width.saturating_sub(march_w as u16)) / 2;
+        for (col, ch) in line.chars().enumerate() {
+            let x = x_start + col as u16;
+            if x >= area.right() { continue; }
+            if ch != ' ' {
+                let cell = &mut buf[(x, y)];
+                cell.set_char(ch);
+                cell.set_style(Style::default().fg(sub_color));
+            }
+        }
+    }
+
+    // "JUSTICE" line
+    let justice_w = justice[0].chars().count();
+    for (row, line) in justice.iter().enumerate() {
+        let y = title_start_y + 15 + row as u16;
+        if y >= area.bottom() { break; }
+        let x_start = area.left() + (area.width.saturating_sub(justice_w as u16)) / 2;
+        for (col, ch) in line.chars().enumerate() {
+            let x = x_start + col as u16;
+            if x >= area.right() { continue; }
+            if ch != ' ' {
+                let cell = &mut buf[(x, y)];
+                cell.set_char(ch);
+                cell.set_style(Style::default().fg(sub_color));
+            }
+        }
+    }
+
+    // ── Decorative divider ───────────────────────────────────────────
+    let div_fade = fade_factor(frame_count, 30, 12);
+    let div_y = title_start_y + 21;
+    if div_y < area.bottom() {
+        let div_str = "░▒▓██████████████████████████▓▒░";
+        let x_start = center_x(&area, div_str);
+        for (col, ch) in div_str.chars().enumerate() {
+            let x = x_start + col as u16;
+            if x >= area.right() { continue; }
+            let cell = &mut buf[(x, div_y)];
+            cell.set_char(ch);
+            cell.set_style(Style::default().fg(dim_rgb(180, 50, 50, div_fade)));
+        }
+    }
+
+    // ── Credits & date ───────────────────────────────────────────────
+    let credits_fade = fade_factor(frame_count, 36, 15);
+    let credit_lines = [
+        ("A solitaire wargame by Ray Weiss", (220, 220, 220)),
+        ("Published by Conflict Simulations Ltd.", (160, 160, 170)),
+        ("June 23, 2023 \u{2014} The March on Moscow", (180, 160, 100)),
+    ];
+    for (i, (text, (r, g, b))) in credit_lines.iter().enumerate() {
+        let y = title_start_y + 23 + i as u16;
+        if y >= area.bottom() || text.is_empty() { continue; }
+        let color = dim_rgb(*r, *g, *b, credits_fade);
+        let x_start = center_x(&area, text);
+        for (col, ch) in text.chars().enumerate() {
+            let x = x_start + col as u16;
+            if x >= area.right() { continue; }
+            let cell = &mut buf[(x, y)];
+            cell.set_char(ch);
+            cell.set_style(Style::default().fg(color));
+        }
+    }
+
+    // ── Flavor text ──────────────────────────────────────────────────
+    let flavor_fade = fade_factor(frame_count, 46, 15);
+    let flavor_lines = [
+        ("Wagner forces stand in Rostov-On-Don.", (200, 200, 200)),
+        ("The road to Moscow lies open before them.", (200, 200, 200)),
+    ];
+    for (i, (text, (r, g, b))) in flavor_lines.iter().enumerate() {
+        let y = title_start_y + 27 + i as u16;
+        if y >= area.bottom() { continue; }
+        let color = dim_rgb(*r, *g, *b, flavor_fade);
+        let x_start = center_x(&area, text);
+        for (col, ch) in text.chars().enumerate() {
+            let x = x_start + col as u16;
+            if x >= area.right() { continue; }
+            let cell = &mut buf[(x, y)];
+            cell.set_char(ch);
+            cell.set_style(Style::default().fg(color));
+        }
+    }
+
+    // ── Pushkin quote ────────────────────────────────────────────────
+    let quote_fade = fade_factor(frame_count, 56, 15);
+    let quote_y = title_start_y + 30;
+    if quote_y + 1 < area.bottom() {
+        let q1 = "\u{201C}The people are silent.\u{201D}";
+        let q2 = "\u{2014} Pushkin, Boris Godunov";
+        let q1_color = dim_rgb(255, 255, 255, quote_fade);
+        let q2_color = dim_rgb(120, 120, 130, quote_fade);
+        for (text, color, dy) in [(q1, q1_color, 0u16), (q2, q2_color, 1)] {
+            let y = quote_y + dy;
+            if y >= area.bottom() { continue; }
+            let x_start = center_x(&area, text);
+            for (col, ch) in text.chars().enumerate() {
+                let x = x_start + col as u16;
+                if x >= area.right() { continue; }
+                let cell = &mut buf[(x, y)];
+                cell.set_char(ch);
+                cell.set_style(Style::default().fg(color).add_modifier(Modifier::ITALIC));
+            }
+        }
+    }
+
+    // ── Menu prompts ─────────────────────────────────────────────────
+    let menu_fade = fade_factor(frame_count, 66, 15);
+    let menu_y = title_start_y + 33;
+    if menu_y + 1 < area.bottom() {
+        // Blinking effect on ENTER (toggles every ~30 frames)
+        let blink = (frame_count / 30) % 2 == 0;
+        let enter_brightness = if blink && menu_fade >= 1.0 { 255 } else { 180 };
+        let enter_color = dim_rgb(enter_brightness, enter_brightness, 50, menu_fade);
+        let quit_color = dim_rgb(140, 140, 140, menu_fade);
+
+        let enter_text = "Press ENTER to begin";
+        let quit_text = "Press Q to quit";
+        for (text, color, dy) in [
+            (enter_text, enter_color, 0u16),
+            (quit_text, quit_color, 1),
+        ] {
+            let y = menu_y + dy;
+            if y >= area.bottom() { continue; }
+            let x_start = center_x(&area, text);
+            for (col, ch) in text.chars().enumerate() {
+                let x = x_start + col as u16;
+                if x >= area.right() { continue; }
+                let cell = &mut buf[(x, y)];
+                cell.set_char(ch);
+                cell.set_style(Style::default().fg(color));
+            }
+        }
+    }
+
+    // ── Russian flag stripe at bottom ────────────────────────────────
+    if area.height > 2 {
+        let y = area.bottom() - 1;
+        for x in area.left()..area.right() {
+            let rel = (x - area.left()) as usize;
+            let (r, g, b) = if rel < third {
+                (220, 220, 220)
+            } else if rel < third * 2 {
+                (0, 57, 166)
+            } else {
+                (213, 43, 30)
+            };
+            let cell = &mut buf[(x, y)];
+            cell.set_char('▄');
+            cell.set_style(Style::default().fg(dim_rgb(r, g, b, stripe_fade)));
+        }
+    }
 }
 
 fn draw_mct_select_menu(f: &mut Frame, game: &GameState, area: Rect) {
@@ -677,19 +920,40 @@ fn draw_mct_select_menu(f: &mut Frame, game: &GameState, area: Rect) {
     labels.push("Done → Start Wagner Turn".into());
 
     let mut items = menu_items(&labels, game.cursor);
-    // Add hint at bottom
-    let hint = ListItem::new(Line::from(Span::styled(
-        "  ↑↓ Navigate  Enter Select  Esc Back",
+
+    // Guide text
+    items.push(ListItem::new(Line::from("")));
+    items.push(ListItem::new(Line::from(Span::styled(
+        "─── MANEUVER/COMBAT TRACK (MCT) ───",
+        Style::default().fg(M4_COLOR),
+    ))));
+    for line in [
+        "Each Wagner unit has a position on the MCT that",
+        "sets its Strike Power (SP) and Movement (MP).",
+        "",
+        "  Shift UP   = stronger attacks, slower movement",
+        "  Shift DOWN = weaker attacks, faster movement",
+        "",
+        "All units start at 2 SP / 2 MP. Adjust each unit",
+        "once per turn to match your plan for this turn.",
+    ] {
+        items.push(ListItem::new(Line::from(Span::styled(
+            format!("  {}", line),
+            Style::default().fg(DIM),
+        ))));
+    }
+
+    items.push(ListItem::new(Line::from("")));
+    items.push(ListItem::new(Line::from(Span::styled(
+        "  ↑↓ Navigate  Enter Select  ? Help  Q Quit",
         Style::default().fg(DIM),
-    )));
+    ))));
 
     let block = Block::default()
         .title(" ADMINISTRATION: Adjust MCT ")
         .title_style(Style::default().fg(HIGHLIGHT))
         .borders(Borders::ALL)
         .border_style(Style::default().fg(DIM));
-    items.push(ListItem::new(Line::from("")));
-    items.push(hint);
     let list = List::new(items).block(block);
     f.render_widget(list, area);
 }
@@ -714,14 +978,36 @@ fn draw_phase_menu(f: &mut Frame, game: &GameState, area: Rect) {
         _ => vec!["Continue".into()],
     };
     let block = Block::default()
-        .title(" WAGNER ACTIONS ")
+        .title(format!(" WAGNER ACTIONS — Turn {} ", game.turn))
         .title_style(Style::default().fg(HIGHLIGHT))
         .borders(Borders::ALL)
         .border_style(Style::default().fg(DIM));
     let mut items = menu_items(&labels, game.cursor);
+
+    // Guide text
     items.push(ListItem::new(Line::from("")));
     items.push(ListItem::new(Line::from(Span::styled(
-        "  ? Help   Tab Unit Info",
+        "─── WAGNER PLAYER TURN ───",
+        Style::default().fg(M4_COLOR),
+    ))));
+    for line in [
+        "Move your units along roads toward Moscow.",
+        "Initiate Contact to attack adjacent enemies.",
+        "Units can move and attack in the same turn.",
+        "",
+        "VICTORY: Trace a Line of Communication along",
+        "the M4 (blue road) from Rostov to Moscow with",
+        "no enemy units blocking and Moscow occupied.",
+    ] {
+        items.push(ListItem::new(Line::from(Span::styled(
+            format!("  {}", line),
+            Style::default().fg(DIM),
+        ))));
+    }
+
+    items.push(ListItem::new(Line::from("")));
+    items.push(ListItem::new(Line::from(Span::styled(
+        "  ? Help   Tab Unit Info   Q Quit",
         Style::default().fg(DIM),
     ))));
     let list = List::new(items).block(block);
@@ -768,7 +1054,38 @@ fn draw_move_unit_menu(f: &mut Frame, game: &GameState, area: Rect) {
         }
     }
     labels.push("Back".into());
-    draw_menu(f, "SELECT UNIT TO MOVE", &labels, game.cursor, area);
+
+    let block = Block::default()
+        .title(" SELECT UNIT TO MOVE ")
+        .title_style(Style::default().fg(HIGHLIGHT))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(DIM));
+    let mut items = menu_items(&labels, game.cursor);
+
+    items.push(ListItem::new(Line::from("")));
+    items.push(ListItem::new(Line::from(Span::styled(
+        "─── MOVEMENT ───",
+        Style::default().fg(M4_COLOR),
+    ))));
+    for line in [
+        "Pick a unit, then choose destinations one at a",
+        "time until it runs out of Movement Points (MP).",
+        "",
+        "  Moving between locations: 1 MP",
+        "  River crossing (blue edge): +1 MP extra",
+        "  Roadblocked location: +1 MP extra",
+        "",
+        "Units cannot enter enemy-occupied locations.",
+        "Press Esc at any time to stop a unit's movement.",
+    ] {
+        items.push(ListItem::new(Line::from(Span::styled(
+            format!("  {}", line),
+            Style::default().fg(DIM),
+        ))));
+    }
+
+    let list = List::new(items).block(block);
+    f.render_widget(list, area);
 }
 
 fn draw_move_dest_menu(f: &mut Frame, game: &GameState, area: Rect, unit_idx: usize) {
@@ -800,7 +1117,25 @@ fn draw_move_dest_menu(f: &mut Frame, game: &GameState, area: Rect, unit_idx: us
         ));
     }
     labels.push("Back".into());
-    draw_menu(f, &format!("MOVE {} TO", unit.id.name()), &labels, game.cursor, area);
+
+    let mp_rem = game.mp_remaining(unit_idx);
+    let mp_max = game.effective_mp(unit_idx);
+    let title = format!(" MOVE {} — MP: {}/{} ", unit.id.name(), mp_rem, mp_max);
+    let block = Block::default()
+        .title(title)
+        .title_style(Style::default().fg(HIGHLIGHT))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(DIM));
+    let mut items = menu_items(&labels, game.cursor);
+
+    items.push(ListItem::new(Line::from("")));
+    items.push(ListItem::new(Line::from(Span::styled(
+        "  ✗ = not enough MP   Esc/Back = done moving",
+        Style::default().fg(DIM),
+    ))));
+
+    let list = List::new(items).block(block);
+    f.render_widget(list, area);
 }
 
 fn draw_contact_loc_menu(f: &mut Frame, game: &GameState, area: Rect) {
@@ -823,7 +1158,38 @@ fn draw_contact_loc_menu(f: &mut Frame, game: &GameState, area: Rect) {
         })
         .collect();
     labels.push("Back".into());
-    draw_menu(f, "CONTACT: Select Location", &labels, game.cursor, area);
+
+    let block = Block::default()
+        .title(" CONTACT: Select Location ")
+        .title_style(Style::default().fg(HIGHLIGHT))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(DIM));
+    let mut items = menu_items(&labels, game.cursor);
+
+    items.push(ListItem::new(Line::from("")));
+    items.push(ListItem::new(Line::from(Span::styled(
+        "─── CONTACT (COMBAT) ───",
+        Style::default().fg(M4_COLOR),
+    ))));
+    for line in [
+        "Attack enemy units in an adjacent location.",
+        "Pick which of your units at this location join.",
+        "",
+        "  CD = your SP - their SP (higher is better)",
+        "  DRMs: Momentum, Flanking (+1 per extra loc),",
+        "    River crossing (-1), Moscow (-2)",
+        "",
+        "Results range from Surrender (best) to Attacker",
+        "Routed (worst). See ? Help for the full CRT.",
+    ] {
+        items.push(ListItem::new(Line::from(Span::styled(
+            format!("  {}", line),
+            Style::default().fg(DIM),
+        ))));
+    }
+
+    let list = List::new(items).block(block);
+    f.render_widget(list, area);
 }
 
 fn draw_contact_target_menu(
@@ -1095,7 +1461,7 @@ fn draw_russian_phase(f: &mut Frame, game: &GameState, area: Rect) {
     ];
 
     // Show last few log entries related to Russian phase
-    let recent: Vec<&String> = game.log.iter().rev().take(6).collect();
+    let recent: Vec<&String> = game.log.iter().rev().take(8).collect();
     for entry in recent.iter().rev() {
         lines.push(Line::from(Span::styled(
             entry.to_string(),
@@ -1109,6 +1475,25 @@ fn draw_russian_phase(f: &mut Frame, game: &GameState, area: Rect) {
         Style::default().fg(HIGHLIGHT),
     )));
 
+    // Guide text
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "─── RUSSIAN AI PHASE ───",
+        Style::default().fg(M4_COLOR),
+    )));
+    for text in [
+        "  Each turn, Russia pulls 1 unit from the Moscow",
+        "  Mobilization Cup and places it on the map.",
+        "  Russia then deploys roadblocks, moves units,",
+        "  and attacks Wagner if the odds are favorable.",
+        "  \"The People Are Silent\" event can weaken Russia",
+        "  if Wagner has high Momentum.",
+    ] {
+        lines.push(Line::from(Span::styled(
+            text, Style::default().fg(DIM),
+        )));
+    }
+
     let block = Block::default()
         .title(" RUSSIAN AI PHASE ")
         .title_style(Style::default().fg(RUSSIA_COLOR))
@@ -1118,7 +1503,7 @@ fn draw_russian_phase(f: &mut Frame, game: &GameState, area: Rect) {
 }
 
 fn draw_end_turn(f: &mut Frame, game: &GameState, area: Rect) {
-    let lines = vec![
+    let mut lines = vec![
         Line::from(Span::styled(
             format!("End of Turn {}.", game.turn),
             Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
@@ -1135,11 +1520,35 @@ fn draw_end_turn(f: &mut Frame, game: &GameState, area: Rect) {
         )),
     ];
 
+    // Guide text
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "─── MOMENTUM ADJUSTMENTS ───",
+        Style::default().fg(M4_COLOR),
+    )));
+    for text in [
+        "  Wagner in Rubelo?           +1",
+        "  Russian unit reduced?       +1",
+        "  Wagner in Moscow?           +2",
+        "  Russian unit eliminated?    +2",
+        "  Russia in Rostov?           -1",
+        "  Wagner unit repulsed?       -1",
+        "  Wagner unit reduced?        -2",
+        "  Wagner unit eliminated?     -3",
+        "",
+        "  Positive = Wagner advantage (DRM in combat)",
+        "  Negative = Russian advantage",
+    ] {
+        lines.push(Line::from(Span::styled(
+            text, Style::default().fg(DIM),
+        )));
+    }
+
     let block = Block::default()
         .title(" END TURN ")
         .title_style(Style::default().fg(HIGHLIGHT))
         .borders(Borders::ALL);
-    let p = Paragraph::new(lines).block(block);
+    let p = Paragraph::new(lines).block(block).wrap(Wrap { trim: false });
     f.render_widget(p, area);
 }
 

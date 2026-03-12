@@ -28,6 +28,7 @@ pub fn run() -> io::Result<()> {
     // Main loop
     loop {
         terminal.draw(|f| ui::draw(f, &game))?;
+        game.frame_count = game.frame_count.wrapping_add(1);
 
         // Poll for events with a timeout (allows future animation)
         if event::poll(Duration::from_millis(100))? {

@@ -1,39 +1,45 @@
 # PMJ Digital — Session Notes
 
-## Session 2 (continued) — 2026-03-12
+## Session 3 — 2026-03-12
 
 ### Summary
-Built out major UI features, did full code audit, fixed bugs, and started UX polish based on first playtest feedback.
+Flashy animated title screen, continuous movement, global help/quit, and contextual phase guides for new players.
 
 ### What got done this session
-1. **Halfblock unit symbols** — `▐R▌` `▐U▌` `▐S▌` for Wagner, NATO symbols for Russia
-2. **Police units enforcement** — OMON/MOSpol can't initiate attacks
-3. **Dispersal / GTT return** — dispersed units return home next turn
-4. **Contact UI** — toggle individual attackers on/off, show flanking count
-5. **Help screen** — press `?` for rules/keybinds reference (F1 grabbed by VSCode)
-6. **Game over narrative** — thematic win/loss text, R to restart
-7. **Unit roster panel** — all 12 units shown in right sidebar
-8. **Movement highlights** — green=valid, red=too expensive, dim=not adjacent on map
-9. **Unit detail popup** — Tab to view full unit stats, Tab/Shift+Tab to cycle
-10. **Code audit** — fixed dispersed rebuild bug, blocked invalid move selection, cleaned warnings
-11. **Key input fix** — filtered `KeyEventKind::Press` only (was processing Release too, causing 2-3x input on Windows)
-12. **Title + Game Over now full-screen** — no longer crammed into right panel
-13. **Map rework** — bigger boxed location labels (full names), spread-out positions matching board layout, wider Bresenham line spacing
-14. **Phase menu hint** — shows `? Help  Tab Unit Info` at bottom
+1. **Animated title screen** — Veridian Contraption-style with:
+   - Block-letter ASCII art for PRIGOZHIN'S / MARCH OF / JUSTICE
+   - Russian flag stripes (white/blue/red) at top and bottom
+   - Staggered fade-in animation for each section
+   - Background noise texture (drifting dots)
+   - Color-cycling title (red/gold pulse)
+   - Blinking "Press ENTER" prompt
+   - Frame counter added to GameState and app loop
+2. **Continuous movement** — after moving a unit, if it still has MP it stays in the destination picker so you can keep moving without re-selecting. Title bar shows remaining MP.
+3. **Global `?` help** — works from any game screen, not just phase menu. Returns to exact previous screen.
+4. **Global `Q` quit** — works from any game screen mid-game.
+5. **Contextual phase guides** — every major screen now has built-in rules explanations:
+   - MCT Select: explains what MCT does, shift up/down tradeoffs
+   - Wagner Turn: explains options, victory conditions
+   - Move Select: explains MP costs (river, roadblock), how to stop
+   - Move Destination: shows remaining MP in title bar
+   - Contact Select: explains CD, DRMs, result range
+   - Russian AI: explains mobilization cup, roadblocks, AI behavior
+   - End Turn: full momentum adjustment table (all 8 conditions)
 
-### First playtest feedback (from Ray in VSCode terminal)
-- F1 doesn't work in VSCode (fixed: `?` works)
-- Arrow keys were EXTREMELY jumpy (fixed: KeyEventKind::Press filter)
-- Map was cryptic/hard to read (fixed: full name boxes, better layout)
-- Wants a flashy title screen — reference Veridian Contraption project (couldn't find repo, need Ray to point to it)
-- Wants Russian flags and other fun polish on title screen
+### Second playtest feedback (from Ray)
+- Title was slightly off-center (fixed: UTF-8 byte vs char count)
+- "MARCH OF" ran together as one word (fixed: added word spacer)
+- Wanted MARCH OF JUSTICE in block letters too (done: split into two lines)
+- Movement one-area-at-a-time was tedious (fixed: continuous movement)
+- `?` help didn't work outside phase menu (fixed: global handler)
+- No way to quit mid-game (fixed: global Q handler)
+- Wanted in-game rules guidance for new players (done: contextual guides)
 
-### What's next (Session 3)
-1. **Title screen overhaul** — make it flashy with Russian theme, ASCII art, flags. Ray wants it similar to "Veridian Contraption" project (ask Ray where that repo is)
-2. **More map polish** — verify new layout looks good, may need position tweaks after testing
-3. **General UX polish** — anything that feels rough during playtesting
-4. **Remaining polish items** from PENDING_TASKS.md
+### What's next (Session 4)
+1. **Map position fine-tuning** — verify layout looks right during play
+2. **Sound/flash on combat results** — if terminal supports it
+3. **Save/load game** — Ray noted this will be needed eventually
+4. **General playtesting polish** — anything that feels rough
 
 ### Git status
-All committed and pushed to origin/master through commit 8407bf6.
-Map rework + key fix + title fullscreen + phase menu hints are NOT yet committed — need to commit these.
+All committed and pushed to origin/master.

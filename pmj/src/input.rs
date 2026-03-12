@@ -8,6 +8,23 @@ use crate::units::UnitId;
 
 /// Process a key event. Returns true if the app should quit.
 pub fn handle_key(game: &mut GameState, key: KeyEvent) -> bool {
+    // ── Global keys (available on most game screens) ─────────────
+    let on_game_screen = !matches!(
+        game.screen,
+        Screen::Title | Screen::GameOver { .. } | Screen::HelpScreen
+    );
+    if on_game_screen {
+        match key.code {
+            KeyCode::Char('q') | KeyCode::Char('Q') => return true,
+            KeyCode::F(1) | KeyCode::Char('?') => {
+                game.prev_screen = Some(Box::new(game.screen.clone()));
+                game.screen = Screen::HelpScreen;
+                return false;
+            }
+            _ => {}
+        }
+    }
+
     match &game.screen.clone() {
         Screen::Title => {
             match key.code {
@@ -184,9 +201,6 @@ fn handle_phase_menu(game: &mut GameState, key: KeyEvent) {
                 _ => {}
             }
         }
-        KeyCode::F(1) | KeyCode::Char('?') => {
-            game.screen = Screen::HelpScreen;
-        }
         KeyCode::Tab => {
             // Show first Wagner unit on map in the detail panel
             let wagner_ids = [UnitId::Rusich, UnitId::Utkin, UnitId::Serb];
@@ -257,8 +271,12 @@ fn handle_unit_detail(game: &mut GameState, key: KeyEvent, current_idx: usize) {
 fn handle_help_screen(game: &mut GameState, key: KeyEvent) {
     match key.code {
         KeyCode::Esc | KeyCode::F(1) | KeyCode::Char('?') => {
-            game.screen = Screen::PhaseMenu;
-            game.cursor = 0;
+            if let Some(prev) = game.prev_screen.take() {
+                game.screen = *prev;
+            } else {
+                game.screen = Screen::PhaseMenu;
+                game.cursor = 0;
+            }
         }
         _ => {}
     }
@@ -334,8 +352,14 @@ fn handle_move_select_dest(game: &mut GameState, key: KeyEvent, unit_idx: usize)
                 // Only attempt move if valid (enough MP, no enemy)
                 if game.can_move(unit_idx, dest).is_ok() {
                     game.move_unit(unit_idx, dest);
-                    game.screen = Screen::PhaseMenu;
-                    game.cursor = 0;
+                    // If unit still has MP, stay in move mode at new location
+                    if game.mp_remaining(unit_idx) > 0 {
+                        game.screen = Screen::MoveSelectDest(unit_idx);
+                        game.cursor = 0;
+                    } else {
+                        game.screen = Screen::PhaseMenu;
+                        game.cursor = 0;
+                    }
                 }
                 // Invalid moves are silently ignored (menu shows ✗ marker)
             }
