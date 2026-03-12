@@ -1,7 +1,7 @@
 This is PMJ DIGITAL — a Rust TUI implementation of "Prigozhin's March of Justice," a solitaire board wargame designed by Ray Weiss and published by CSL.
 
 The authoritative rules source is `Prigozhin 1.10-1.pdf` in the project root.
-The Python prototype (`main.py`, `combat.py`, etc.) is reference only — the Rust version is the real implementation.
+The Python prototype lives in `python_prototype/` — reference only, the Rust version is the real implementation.
 The Rust project lives in the `pmj/` subdirectory (standard Cargo layout).
 
 The user is not a programmer — explain technical decisions plainly and avoid jargon.

@@ -261,6 +261,21 @@ impl GameState {
         if from == to {
             return Err("Already there.".into());
         }
+
+        // Stacking: only units from one side can occupy a location (rulebook 3.9)
+        let enemy_side = if unit.is_wagner() {
+            Side::Russia
+        } else {
+            Side::Wagner
+        };
+        let enemy_there = self
+            .units_at(to)
+            .iter()
+            .any(|&i| self.units[i].side == enemy_side);
+        if enemy_there {
+            return Err("Enemy units occupy that location.".into());
+        }
+
         let cost = self
             .move_cost(idx, from, to)
             .ok_or("Locations not connected.")?;
@@ -309,6 +324,20 @@ impl GameState {
 
     // ── Contact ──────────────────────────────────────────────────────────
 
+    /// Count flanking locations: other Wagner-occupied locations adjacent to target (max 2).
+    fn count_flanking(&self, primary_loc: Location, target_loc: Location) -> i32 {
+        let mut count = 0;
+        for &(neighbor, _) in self.map.neighbors(target_loc) {
+            if neighbor == primary_loc {
+                continue; // Primary attack location doesn't count
+            }
+            if !self.wagner_units_at(neighbor).is_empty() {
+                count += 1;
+            }
+        }
+        count.min(2)
+    }
+
     /// Find Wagner locations that have adjacent Russian-occupied locations.
     pub fn contact_opportunities(&self) -> Vec<(Location, Vec<Location>)> {
         let mut results = Vec::new();
@@ -347,8 +376,8 @@ impl GameState {
             .all(|&i| self.units[i].is_helicopter());
         let attacking_moscow = target_loc == Location::Moscow;
 
-        // TODO: flanking from other locations
-        let flanking = 0;
+        // Flanking: count other Wagner-occupied locations adjacent to the target
+        let flanking = self.count_flanking(from_loc, target_loc);
 
         let outcome = combat::resolve_contact(
             attack_sp,
@@ -622,8 +651,30 @@ impl GameState {
         self.screen = Screen::RussianPhaseDisplay;
         self.cursor = 0;
 
-        // Moscow Mobilization - draw from cup
+        // Full Russian AI Phase per rulebook section 7.0
+        self.record("── Russian AI Phase ──");
+
+        // 7.1 Moscow Mobilization
         self.run_russian_mobilization();
+
+        // 7.2 Russian Momentum Expenditure
+        self.run_russian_momentum_expenditure();
+
+        // 7.3 Deploy Roadblock
+        self.run_russian_roadblock_deploy();
+
+        // Reset MP for Russian units
+        for unit in &mut self.units {
+            if unit.side == Side::Russia {
+                unit.reset_mp();
+            }
+        }
+
+        // 7.4 Russian AI Priority Table + 7.5 Russian Attacks
+        self.run_russian_ai_attacks();
+
+        // Akhmat special rule (7.4.3)
+        self.run_akhmat_tiktok();
     }
 
     fn run_russian_mobilization(&mut self) {
@@ -709,6 +760,456 @@ impl GameState {
                 ));
             }
         }
+    }
+
+    // ── 7.2 Russian Momentum Expenditure ────────────────────────────────
+
+    fn run_russian_momentum_expenditure(&mut self) {
+        if self.momentum >= 0 {
+            return; // AI only spends negative momentum
+        }
+
+        let spend = (-self.momentum) as usize; // 1, 2, or 3
+        self.record(format!(
+            "Russian AI spending {} negative momentum.",
+            spend
+        ));
+
+        match spend {
+            1 => {
+                // Restore one reduced Russian unit
+                if let Some(idx) = self.find_reduced_russian() {
+                    let name = self.units[idx].id.name().to_string();
+                    self.units[idx].is_reduced = false;
+                    self.record(format!("{} restored to full strength.", name));
+                }
+            }
+            2 => {
+                // Restore two reduced OR rebuild one eliminated to reduced in Moscow
+                let r1 = self.find_reduced_russian();
+                let r2 = r1.and_then(|first| self.find_reduced_russian_except(first));
+                if r1.is_some() && r2.is_some() {
+                    for idx in [r1.unwrap(), r2.unwrap()] {
+                        let name = self.units[idx].id.name().to_string();
+                        self.units[idx].is_reduced = false;
+                        self.record(format!("{} restored to full strength.", name));
+                    }
+                } else if r1.is_some() {
+                    let idx = r1.unwrap();
+                    let name = self.units[idx].id.name().to_string();
+                    self.units[idx].is_reduced = false;
+                    self.record(format!("{} restored to full strength.", name));
+                    // Try rebuilding an eliminated unit
+                    self.rebuild_eliminated_russian();
+                } else {
+                    self.rebuild_eliminated_russian();
+                }
+            }
+            3 => {
+                // Restore eliminated to full strength in Moscow + restore up to 3 reduced
+                self.rebuild_eliminated_russian_full();
+                for _ in 0..3 {
+                    if let Some(idx) = self.find_reduced_russian() {
+                        let name = self.units[idx].id.name().to_string();
+                        self.units[idx].is_reduced = false;
+                        self.record(format!("{} restored to full strength.", name));
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        // Momentum spent → shift back to 0
+        let old = self.momentum;
+        self.momentum = 0;
+        self.record(format!("Momentum spent: {:+} → 0", old));
+    }
+
+    fn find_reduced_russian(&self) -> Option<usize> {
+        self.units
+            .iter()
+            .enumerate()
+            .find(|(_, u)| u.side == Side::Russia && u.is_on_map() && u.is_reduced)
+            .map(|(i, _)| i)
+    }
+
+    fn find_reduced_russian_except(&self, except: usize) -> Option<usize> {
+        self.units
+            .iter()
+            .enumerate()
+            .find(|(i, u)| {
+                *i != except && u.side == Side::Russia && u.is_on_map() && u.is_reduced
+            })
+            .map(|(i, _)| i)
+    }
+
+    fn rebuild_eliminated_russian(&mut self) {
+        if let Some(idx) = self
+            .units
+            .iter()
+            .enumerate()
+            .find(|(_, u)| u.side == Side::Russia && !u.is_on_map() && u.has_reduced_side)
+            .map(|(i, _)| i)
+        {
+            let name = self.units[idx].id.name().to_string();
+            self.units[idx].location = Some(Location::Moscow);
+            self.units[idx].is_reduced = true;
+            self.record(format!(
+                "{} rebuilt to REDUCED and placed in Moscow.",
+                name
+            ));
+        }
+    }
+
+    fn rebuild_eliminated_russian_full(&mut self) {
+        if let Some(idx) = self
+            .units
+            .iter()
+            .enumerate()
+            .find(|(_, u)| u.side == Side::Russia && !u.is_on_map())
+            .map(|(i, _)| i)
+        {
+            let name = self.units[idx].id.name().to_string();
+            self.units[idx].location = Some(Location::Moscow);
+            self.units[idx].is_reduced = false;
+            self.record(format!(
+                "{} rebuilt to FULL strength and placed in Moscow.",
+                name
+            ));
+        }
+    }
+
+    // ── 7.3 Roadblock Deployment ─────────────────────────────────────────
+
+    fn run_russian_roadblock_deploy(&mut self) {
+        // Find the Wagner unit closest to Moscow and place roadblock between them
+        let mut closest_wagner_loc: Option<Location> = None;
+        let mut closest_dist = usize::MAX;
+
+        // Simple BFS distance from Moscow
+        for wloc in self.wagner_locations() {
+            let dist = self.bfs_distance(wloc, Location::Moscow);
+            if dist < closest_dist {
+                closest_dist = dist;
+                closest_wagner_loc = Some(wloc);
+            }
+        }
+
+        if let Some(wagner_loc) = closest_wagner_loc {
+            // Place roadblock on a location between Wagner and Moscow/Rublevo
+            // that doesn't already have a roadblock, isn't Rostov or Grozny
+            let path = self.bfs_path(wagner_loc, Location::Moscow);
+            for &loc in &path {
+                if loc == wagner_loc
+                    || loc == Location::RostovOnDon
+                    || loc == Location::GroznyAkhmatBase
+                {
+                    continue;
+                }
+                // Don't double up
+                if self.roadblocks[0] == Some(loc) || self.roadblocks[1] == Some(loc) {
+                    continue;
+                }
+
+                // Find an empty roadblock slot
+                if self.roadblocks[0].is_none() {
+                    self.roadblocks[0] = Some(loc);
+                    self.record(format!("Roadblock 1 deployed at {}.", loc.name()));
+                    break;
+                } else if self.roadblocks[1].is_some() {
+                    // Second roadblock available — can reposition
+                    let old = self.roadblocks[1].unwrap();
+                    if old != loc {
+                        self.roadblocks[1] = Some(loc);
+                        self.record(format!(
+                            "Roadblock 2 repositioned {} → {}.",
+                            old.name(),
+                            loc.name()
+                        ));
+                    }
+                    break;
+                }
+                break;
+            }
+        }
+    }
+
+    // ── 7.4 Russian AI Priority Table ────────────────────────────────────
+
+    fn run_russian_ai_attacks(&mut self) {
+        use rand::Rng;
+
+        // Gather Russian units on map that can attack (not police)
+        let russian_attackers: Vec<usize> = self
+            .units
+            .iter()
+            .enumerate()
+            .filter(|(_, u)| {
+                u.side == Side::Russia && u.is_on_map() && !u.police
+            })
+            .map(|(i, _)| i)
+            .collect();
+
+        if russian_attackers.is_empty() {
+            self.record("No Russian units available for attack.");
+            return;
+        }
+
+        // RAPT Step 1: Find attacks with CD >= +3 including all modifiers
+        let mut best_attack: Option<(Vec<usize>, Location, Location, i32)> = None;
+
+        for wloc in self.wagner_locations() {
+            let wagner_sp: i32 = self
+                .wagner_units_at(wloc)
+                .iter()
+                .map(|&i| self.effective_sp(i))
+                .sum();
+
+            // Find Russian units adjacent to this Wagner location
+            for &(neighbor, edge_props) in self.map.neighbors(wloc) {
+                let r_here: Vec<usize> = russian_attackers
+                    .iter()
+                    .copied()
+                    .filter(|&i| self.units[i].location == Some(neighbor))
+                    .collect();
+                if r_here.is_empty() {
+                    continue;
+                }
+
+                let attack_sp: i32 = r_here.iter().map(|&i| self.effective_sp(i)).sum();
+                let cd = attack_sp - wagner_sp;
+                let fr = combat::force_ratio_shift(attack_sp, wagner_sp);
+                let cd_adj = cd + fr;
+
+                // Estimate DRMs (inverted momentum for Russia)
+                let momentum_drm = -self.momentum;
+                let river_drm: i32 = if edge_props.river { -1 } else { 0 };
+                let effective_cd = cd_adj; // We check CD column, not die result
+
+                if effective_cd >= 3 {
+                    let score = effective_cd + momentum_drm - river_drm.abs();
+                    if best_attack.is_none()
+                        || score > best_attack.as_ref().unwrap().3
+                    {
+                        best_attack = Some((r_here, neighbor, wloc, score));
+                    }
+                }
+            }
+        }
+
+        if let Some((attackers, from, target, _)) = best_attack {
+            // Execute Russian attack
+            let attack_sp: i32 = attackers.iter().map(|&i| self.effective_sp(i)).sum();
+            let defend_sp: i32 = self
+                .wagner_units_at(target)
+                .iter()
+                .map(|&i| self.effective_sp(i))
+                .sum();
+
+            let river = self
+                .map
+                .edge(from, target)
+                .map(|e| e.river)
+                .unwrap_or(false);
+            let all_heli = attackers.iter().all(|&i| self.units[i].is_helicopter());
+
+            // Russia uses inverted momentum as DRM
+            let inverted_momentum = -self.momentum;
+
+            let outcome = combat::resolve_contact(
+                attack_sp,
+                defend_sp,
+                inverted_momentum,
+                river,
+                false, // Russia never attacks Moscow
+                0,     // No flanking for AI (simplified)
+                all_heli,
+            );
+
+            let atk_names: Vec<&str> = attackers
+                .iter()
+                .map(|&i| self.units[i].id.name())
+                .collect();
+
+            self.record(format!(
+                "Russian Attack: {} @ {} → {} | ATK:{} DEF:{} | Roll:{} | {}",
+                atk_names.join(", "),
+                from.name(),
+                target.name(),
+                attack_sp,
+                defend_sp,
+                outcome.die_roll,
+                outcome.result.code()
+            ));
+
+            // For Russian attacks, attacker=Russia, defender=Wagner
+            // We need to flip the logic: AR hurts Russia, Rp/R/S hurts Wagner
+            let defender_indices = self.wagner_units_at(target);
+            self.apply_contact_result(&outcome, &attackers, from, &defender_indices, target);
+        } else {
+            // RAPT Step 1a: No good attacks — move toward Moscow/Oka River
+            self.record("No favorable attacks. Russian units hold position.");
+
+            // Move units toward Moscow if not already there
+            for &idx in &russian_attackers {
+                let loc = self.units[idx].location.unwrap();
+                if loc == Location::Moscow || loc == Location::OkaRiver {
+                    continue;
+                }
+                let mp = self.units[idx].base_mp;
+                if mp <= 0 {
+                    continue;
+                }
+
+                // Find neighbor closest to Moscow
+                let neighbors = self.map.neighbors(loc);
+                let mut best_dest: Option<Location> = None;
+                let mut best_dist = self.bfs_distance(loc, Location::Moscow);
+
+                for &(neighbor, _) in neighbors {
+                    // Don't move into Wagner-occupied locations
+                    if !self.wagner_units_at(neighbor).is_empty() {
+                        continue;
+                    }
+                    let dist = self.bfs_distance(neighbor, Location::Moscow);
+                    if dist < best_dist {
+                        best_dist = dist;
+                        best_dest = Some(neighbor);
+                    }
+                }
+
+                if let Some(dest) = best_dest {
+                    let name = self.units[idx].id.name().to_string();
+                    self.units[idx].location = Some(dest);
+                    self.record(format!(
+                        "{} moved {} → {} (toward Moscow).",
+                        name,
+                        loc.name(),
+                        dest.name()
+                    ));
+                }
+            }
+        }
+
+        // RAPT Step 5: Check Rublevo — if Wagner occupies it, prioritize attack
+        if !self.wagner_units_at(Location::Rublevo).is_empty() {
+            // Already handled above in the general attack search
+            // (Rublevo is adjacent to Moscow which is where many Russian units are)
+        }
+    }
+
+    // ── Akhmat Tik Tok rule (7.4.3) ─────────────────────────────────────
+
+    fn run_akhmat_tiktok(&mut self) {
+        use rand::Rng;
+
+        let akhmat_idx = match self.unit_index(UnitId::Akhmat) {
+            Some(i) => i,
+            None => return,
+        };
+
+        if self.units[akhmat_idx].location != Some(Location::GroznyAkhmatBase) {
+            return; // Only applies while in Grozny
+        }
+
+        let roll = rand::thread_rng().gen_range(1..=6);
+        if roll == 6 {
+            self.record(format!(
+                "Akhmat Tik Tok roll: {} — Akhmat moves toward Rostov!",
+                roll
+            ));
+            self.units[akhmat_idx].location = Some(Location::RostovOnDon);
+            self.record("Akhmat moved Grozny → Rostov-On-Don.");
+
+            // Attack Rostov if Wagner is there
+            if !self.wagner_units_at(Location::RostovOnDon).is_empty() {
+                let atk_sp = self.effective_sp(akhmat_idx);
+                let def_sp: i32 = self
+                    .wagner_units_at(Location::RostovOnDon)
+                    .iter()
+                    .map(|&i| self.effective_sp(i))
+                    .sum();
+                let inverted_momentum = -self.momentum;
+                let outcome = combat::resolve_contact(
+                    atk_sp, def_sp, inverted_momentum,
+                    true, // River crossing Grozny -> Rostov
+                    false, 0, false,
+                );
+                self.record(format!(
+                    "Akhmat attacks Rostov! Roll:{} → {}",
+                    outcome.die_roll,
+                    outcome.result.code()
+                ));
+                let defenders = self.wagner_units_at(Location::RostovOnDon);
+                self.apply_contact_result(
+                    &outcome,
+                    &[akhmat_idx],
+                    Location::GroznyAkhmatBase,
+                    &defenders,
+                    Location::RostovOnDon,
+                );
+            }
+        } else {
+            self.record(format!(
+                "Akhmat Tik Tok roll: {} — too busy making Tik Toks.",
+                roll
+            ));
+        }
+    }
+
+    // ── BFS helpers for AI pathfinding ───────────────────────────────────
+
+    fn bfs_distance(&self, from: Location, to: Location) -> usize {
+        if from == to {
+            return 0;
+        }
+        let mut visited = std::collections::HashSet::new();
+        let mut queue = std::collections::VecDeque::new();
+        queue.push_back((from, 0usize));
+        visited.insert(from);
+
+        while let Some((loc, dist)) = queue.pop_front() {
+            for &(neighbor, _) in self.map.neighbors(loc) {
+                if neighbor == to {
+                    return dist + 1;
+                }
+                if visited.insert(neighbor) {
+                    queue.push_back((neighbor, dist + 1));
+                }
+            }
+        }
+        usize::MAX // unreachable in a connected graph
+    }
+
+    fn bfs_path(&self, from: Location, to: Location) -> Vec<Location> {
+        if from == to {
+            return vec![from];
+        }
+        let mut visited = std::collections::HashMap::new();
+        let mut queue = std::collections::VecDeque::new();
+        queue.push_back(from);
+        visited.insert(from, None);
+
+        while let Some(loc) = queue.pop_front() {
+            for &(neighbor, _) in self.map.neighbors(loc) {
+                if !visited.contains_key(&neighbor) {
+                    visited.insert(neighbor, Some(loc));
+                    if neighbor == to {
+                        // Reconstruct path
+                        let mut path = vec![to];
+                        let mut current = to;
+                        while let Some(Some(prev)) = visited.get(&current) {
+                            path.push(*prev);
+                            current = *prev;
+                        }
+                        path.reverse();
+                        return path;
+                    }
+                    queue.push_back(neighbor);
+                }
+            }
+        }
+        vec![] // No path found
     }
 
     pub fn start_end_turn_phase(&mut self) {
