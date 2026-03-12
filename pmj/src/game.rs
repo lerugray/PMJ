@@ -69,6 +69,8 @@ pub enum Screen {
     ViewLog,
     /// Help / rules reference overlay.
     HelpScreen,
+    /// Unit detail popup showing all unit info.
+    UnitDetail(usize), // unit index
     /// Game over screen.
     GameOver { wagner_wins: bool },
 }

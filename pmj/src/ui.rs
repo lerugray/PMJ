@@ -11,7 +11,7 @@ use ratatui::{
 use crate::game::{GameState, Phase, Screen};
 use crate::map::Location;
 use crate::mct::MCT_TRACK;
-use crate::units::UnitId;
+use crate::units::{Side, UnitId};
 
 // ── Color palette ────────────────────────────────────────────────────────
 
@@ -111,6 +111,30 @@ fn draw_map_panel(f: &mut Frame, game: &GameState, area: Rect) {
         }
     }
 
+    // Pre-compute movement highlighting if selecting a destination
+    let move_info: Option<(Location, Vec<(Location, bool)>)> =
+        if let Screen::MoveSelectDest(unit_idx) = &game.screen {
+            let unit = &game.units[*unit_idx];
+            if let Some(from) = unit.location {
+                let neighbors: Vec<(Location, bool)> = game
+                    .map
+                    .neighbors(from)
+                    .iter()
+                    .map(|(n, _)| {
+                        let cost = game.move_cost(*unit_idx, from, *n);
+                        let mp_rem = game.mp_remaining(*unit_idx);
+                        let can_afford = cost.map(|c| c <= mp_rem).unwrap_or(false);
+                        (*n, can_afford)
+                    })
+                    .collect();
+                Some((from, neighbors))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
     // Draw location nodes
     for loc in Location::all() {
         let (cx, cy) = loc.map_pos();
@@ -121,8 +145,26 @@ fn draw_map_panel(f: &mut Frame, game: &GameState, area: Rect) {
         let wagner_here = game.wagner_units_at(*loc);
         let russian_here = game.russian_units_at(*loc);
 
-        // Location label (short name)
-        let label_style = if !wagner_here.is_empty() {
+        // Location label (short name) — override color when selecting move destination
+        let label_style = if let Some((from, ref neighbors)) = move_info {
+            if *loc == from {
+                // Current unit location — highlight yellow
+                Style::default().fg(HIGHLIGHT).add_modifier(Modifier::BOLD)
+            } else if let Some((_, can_afford)) = neighbors.iter().find(|(n, _)| n == loc) {
+                if *can_afford {
+                    // Valid destination — bright green
+                    Style::default()
+                        .fg(Color::Rgb(50, 220, 50))
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    // Adjacent but too expensive — dim red
+                    Style::default().fg(Color::Rgb(180, 50, 50))
+                }
+            } else {
+                // Not adjacent — dim it out
+                Style::default().fg(DIM)
+            }
+        } else if !wagner_here.is_empty() {
             Style::default().fg(WAGNER_COLOR).add_modifier(Modifier::BOLD)
         } else if !russian_here.is_empty() {
             Style::default().fg(RUSSIA_COLOR).add_modifier(Modifier::BOLD)
@@ -202,16 +244,18 @@ fn draw_right_panel(f: &mut Frame, game: &GameState, area: Rect) {
             Constraint::Length(3),  // Turn/Phase header
             Constraint::Length(3),  // Momentum bar
             Constraint::Length(8),  // MCT display
-            Constraint::Min(10),   // Menu / Content area
-            Constraint::Length(8), // Log tail
+            Constraint::Length(9),  // Unit roster
+            Constraint::Min(8),    // Menu / Content area
+            Constraint::Length(6), // Log tail
         ])
         .split(area);
 
     draw_header(f, game, chunks[0]);
     draw_momentum(f, game, chunks[1]);
     draw_mct(f, game, chunks[2]);
-    draw_content(f, game, chunks[3]);
-    draw_log(f, game, chunks[4]);
+    draw_roster(f, game, chunks[3]);
+    draw_content(f, game, chunks[4]);
+    draw_log(f, game, chunks[5]);
 }
 
 fn draw_header(f: &mut Frame, game: &GameState, area: Rect) {
@@ -347,6 +391,116 @@ fn draw_mct(f: &mut Frame, game: &GameState, area: Rect) {
     }
 }
 
+fn draw_roster(f: &mut Frame, game: &GameState, area: Rect) {
+    let block = Block::default()
+        .title(" UNIT ROSTER ")
+        .title_style(Style::default().fg(Color::White))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(DIM));
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
+    if inner.height == 0 || inner.width == 0 {
+        return;
+    }
+
+    // Separate units into Wagner and Russia columns
+    let mut wagner_entries: Vec<(usize, &crate::units::Unit)> = Vec::new();
+    let mut russia_entries: Vec<(usize, &crate::units::Unit)> = Vec::new();
+
+    for (idx, unit) in game.units.iter().enumerate() {
+        if unit.id.is_wagner() {
+            wagner_entries.push((idx, unit));
+        } else {
+            russia_entries.push((idx, unit));
+        }
+    }
+
+    // Header line: Wagner side label left, Russia right
+    let half_w = inner.width / 2;
+    let header = Line::from(vec![
+        Span::styled(
+            format!(" {:<width$}", "Wagner", width = (half_w as usize).saturating_sub(1)),
+            Style::default().fg(WAGNER_COLOR).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            "Russia",
+            Style::default().fg(RUSSIA_COLOR).add_modifier(Modifier::BOLD),
+        ),
+    ]);
+    f.render_widget(
+        Paragraph::new(header),
+        Rect::new(inner.x, inner.y, inner.width, 1),
+    );
+
+    // Render rows: one Wagner and one Russia unit per row
+    let max_rows = (inner.height as usize).saturating_sub(1); // minus header
+    let row_count = wagner_entries.len().max(russia_entries.len()).min(max_rows);
+
+    for row in 0..row_count {
+        let y = inner.y + 1 + row as u16;
+        if y >= inner.y + inner.height {
+            break;
+        }
+
+        let mut spans: Vec<Span> = Vec::new();
+
+        // Wagner column
+        if row < wagner_entries.len() {
+            let (idx, unit) = wagner_entries[row];
+            let sp = game.effective_sp(idx);
+            let fg = if unit.is_reduced { Color::Rgb(160, 40, 40) } else { WAGNER_COLOR };
+            let reduced_mark = if unit.is_reduced { "*" } else { "" };
+            let loc_str = if let Some(loc) = unit.location {
+                loc.short().to_string()
+            } else {
+                "[off]".to_string()
+            };
+            spans.push(Span::styled(" \u{2590}", Style::default().fg(fg))); // ▐
+            spans.push(Span::styled(
+                unit.id.nato_symbol().to_string(),
+                Style::default().fg(Color::White).bg(fg),
+            ));
+            spans.push(Span::styled("\u{258C}", Style::default().fg(fg))); // ▌
+            let entry = format!("{}{} {} {}", unit.id.short(), reduced_mark, sp, loc_str);
+            let padded = format!("{:<width$}", entry, width = (half_w as usize).saturating_sub(5));
+            spans.push(Span::styled(padded, Style::default().fg(fg)));
+        } else {
+            // Empty Wagner column
+            let pad = " ".repeat(half_w as usize);
+            spans.push(Span::styled(pad, Style::default()));
+        }
+
+        // Russia column
+        if row < russia_entries.len() {
+            let (idx, unit) = russia_entries[row];
+            let sp = game.effective_sp(idx);
+            let fg = if unit.is_reduced { Color::Rgb(50, 100, 160) } else { RUSSIA_COLOR };
+            let reduced_mark = if unit.is_reduced { "*" } else { "" };
+            let loc_str = if let Some(loc) = unit.location {
+                loc.short().to_string()
+            } else if unit.in_cup {
+                "[cup]".to_string()
+            } else {
+                "[off]".to_string()
+            };
+            spans.push(Span::styled("\u{2590}", Style::default().fg(fg))); // ▐
+            spans.push(Span::styled(
+                unit.id.nato_symbol().to_string(),
+                Style::default().fg(Color::White).bg(fg),
+            ));
+            spans.push(Span::styled("\u{258C}", Style::default().fg(fg))); // ▌
+            let entry = format!("{}{} {} {}", unit.id.short(), reduced_mark, sp, loc_str);
+            spans.push(Span::styled(entry, Style::default().fg(fg)));
+        }
+
+        f.render_widget(
+            Paragraph::new(Line::from(spans)),
+            Rect::new(inner.x, y, inner.width, 1),
+        );
+    }
+}
+
 fn draw_content(f: &mut Frame, game: &GameState, area: Rect) {
     match &game.screen {
         Screen::Title => draw_title(f, area),
@@ -383,6 +537,7 @@ fn draw_content(f: &mut Frame, game: &GameState, area: Rect) {
         Screen::EndTurnConfirm => draw_end_turn(f, game, area),
         Screen::ViewLog => draw_full_log(f, game, area),
         Screen::HelpScreen => draw_help_screen(f, area),
+        Screen::UnitDetail(idx) => draw_unit_detail(f, game, area, *idx),
         Screen::GameOver { wagner_wins } => draw_game_over(f, area, *wagner_wins),
     }
 }
@@ -981,6 +1136,163 @@ fn draw_full_log(f: &mut Frame, game: &GameState, area: Rect) {
 
     let list = List::new(items);
     f.render_widget(list, inner);
+}
+
+// ── Unit Detail Panel ────────────────────────────────────────────────────
+
+fn draw_unit_detail(f: &mut Frame, game: &GameState, area: Rect, unit_idx: usize) {
+    let unit = &game.units[unit_idx];
+    let is_wagner = unit.side == Side::Wagner;
+    let side_color = if is_wagner { WAGNER_COLOR } else { RUSSIA_COLOR };
+    let side_label = if is_wagner { "Wagner" } else { "Russia" };
+
+    let block = Block::default()
+        .title(" UNIT DETAIL ")
+        .title_style(Style::default().fg(HIGHLIGHT).add_modifier(Modifier::BOLD))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(side_color));
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
+    let mut lines: Vec<Line> = Vec::new();
+
+    // Header: symbol + name + side
+    let symbol = format!("\u{2590}{}\u{258C}", unit.id.nato_symbol());
+    lines.push(Line::from(vec![
+        Span::styled(
+            format!(" {} ", symbol),
+            Style::default().fg(HIGHLIGHT).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            format!("{}", unit.id.name()),
+            Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+        ),
+        Span::raw("  "),
+        Span::styled(
+            format!("[{}]", side_label),
+            Style::default().fg(side_color),
+        ),
+    ]));
+
+    // Separator
+    let sep_width = inner.width.saturating_sub(2) as usize;
+    lines.push(Line::from(Span::styled(
+        "\u{2500}".repeat(sep_width),
+        Style::default().fg(DIM),
+    )));
+
+    // Strike Power
+    let effective_sp = game.effective_sp(unit_idx);
+    let base_sp = unit.current_sp();
+    let sp_detail = if is_wagner {
+        let mct_mod = game.mct_for(unit.id).map(|m| m.sp_mod()).unwrap_or(0);
+        format!("{} (base: {}, MCT: +{})", effective_sp, base_sp, mct_mod)
+    } else {
+        if unit.is_reduced {
+            format!("{} (reduced)", effective_sp)
+        } else {
+            format!("{}", effective_sp)
+        }
+    };
+    lines.push(detail_line("Strike Power:    ", &sp_detail));
+
+    // Movement Points
+    let effective_mp = game.effective_mp(unit_idx);
+    let mp_remaining = game.mp_remaining(unit_idx);
+    let mp_spent = unit.mp_spent;
+    let mp_detail = if is_wagner {
+        format!("{}/{} (spent: {})", mp_remaining, effective_mp, mp_spent)
+    } else {
+        format!("{}/{} (spent: {})", mp_remaining, effective_mp, mp_spent)
+    };
+    lines.push(detail_line("Movement Points: ", &mp_detail));
+
+    // MCT Step (Wagner only)
+    if is_wagner {
+        if let Some(mct) = game.mct_for(unit.id) {
+            let step_label = mct.label();
+            lines.push(detail_line(
+                "MCT Step:        ",
+                &format!("{} ({})", mct.step, step_label),
+            ));
+        }
+    }
+
+    // Location
+    let loc_str = match unit.location {
+        Some(loc) => loc.name().to_string(),
+        None => "Off map".to_string(),
+    };
+    lines.push(detail_line("Location:        ", &loc_str));
+
+    // Status
+    let mut statuses: Vec<&str> = Vec::new();
+    if unit.is_reduced {
+        statuses.push("Reduced");
+    }
+    if unit.dispersed {
+        statuses.push("Dispersed");
+    }
+    if statuses.is_empty() {
+        statuses.push("Full strength");
+    }
+    lines.push(detail_line("Status:          ", &statuses.join(", ")));
+
+    lines.push(Line::from(""));
+
+    // Special traits (Russian units)
+    if !is_wagner {
+        let mut traits: Vec<&str> = Vec::new();
+        if unit.police {
+            traits.push("Police (P) — no offensive capability");
+        }
+        if unit.switchable {
+            traits.push("Switchable (Z) — can defect to Wagner");
+        }
+        if unit.in_cup {
+            traits.push("Cup (C) — starts in Moscow Mobilization Cup");
+        }
+        if unit.id == UnitId::Helicopters {
+            traits.push("Air unit — ignores river crossing costs");
+        }
+        if unit.has_reduced_side {
+            traits.push("Has reduced side");
+        }
+        if traits.is_empty() {
+            lines.push(detail_line("Special:         ", "None"));
+        } else {
+            lines.push(detail_line("Special:         ", traits[0]));
+            for t in &traits[1..] {
+                lines.push(detail_line("                 ", t));
+            }
+        }
+    } else {
+        // Wagner special info
+        lines.push(detail_line("Special:         ", "Wagner PMC — uses MCT for SP/MP"));
+    }
+
+    lines.push(Line::from(""));
+
+    // Footer: navigation hints
+    lines.push(Line::from(vec![
+        Span::styled(" Tab", Style::default().fg(HIGHLIGHT)),
+        Span::styled(" \u{2192} Next unit    ", Style::default().fg(DIM)),
+        Span::styled("Shift+Tab", Style::default().fg(HIGHLIGHT)),
+        Span::styled(" \u{2192} Prev    ", Style::default().fg(DIM)),
+        Span::styled("Esc", Style::default().fg(HIGHLIGHT)),
+        Span::styled(" \u{2192} Back", Style::default().fg(DIM)),
+    ]));
+
+    let paragraph = Paragraph::new(lines).wrap(Wrap { trim: false });
+    f.render_widget(paragraph, inner);
+}
+
+/// Helper: one line with a dim label and a white value.
+fn detail_line(label: &str, value: &str) -> Line<'static> {
+    Line::from(vec![
+        Span::styled(format!(" {}", label), Style::default().fg(DIM)),
+        Span::styled(value.to_string(), Style::default().fg(Color::White)),
+    ])
 }
 
 fn draw_help_screen(f: &mut Frame, area: Rect) {

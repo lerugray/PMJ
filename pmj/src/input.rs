@@ -47,6 +47,7 @@ pub fn handle_key(game: &mut GameState, key: KeyEvent) -> bool {
         Screen::EndTurnConfirm => handle_end_turn(game, key),
         Screen::ViewLog => handle_view_log(game, key),
         Screen::HelpScreen => handle_help_screen(game, key),
+        Screen::UnitDetail(idx) => handle_unit_detail(game, key, *idx),
         Screen::GameOver { .. } => {
             match key.code {
                 KeyCode::Char('q') | KeyCode::Char('Q') => return true,
@@ -185,6 +186,67 @@ fn handle_phase_menu(game: &mut GameState, key: KeyEvent) {
         }
         KeyCode::F(1) | KeyCode::Char('?') => {
             game.screen = Screen::HelpScreen;
+        }
+        KeyCode::Tab => {
+            // Show first Wagner unit on map in the detail panel
+            let wagner_ids = [UnitId::Rusich, UnitId::Utkin, UnitId::Serb];
+            for id in &wagner_ids {
+                if let Some(idx) = game.unit_index(*id) {
+                    if game.units[idx].is_on_map() {
+                        game.screen = Screen::UnitDetail(idx);
+                        return;
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+// ── Unit Detail ──────────────────────────────────────────────────────────
+
+fn handle_unit_detail(game: &mut GameState, key: KeyEvent, current_idx: usize) {
+    match key.code {
+        KeyCode::Tab => {
+            // Cycle to next on-map unit
+            let total = game.units.len();
+            let mut next = current_idx + 1;
+            loop {
+                if next >= total {
+                    next = 0;
+                }
+                if next == current_idx {
+                    break; // wrapped all the way around
+                }
+                if game.units[next].is_on_map() {
+                    game.screen = Screen::UnitDetail(next);
+                    return;
+                }
+                next += 1;
+            }
+        }
+        KeyCode::BackTab => {
+            // Cycle to previous on-map unit
+            let total = game.units.len();
+            let mut prev = if current_idx == 0 { total - 1 } else { current_idx - 1 };
+            loop {
+                if prev == current_idx {
+                    break;
+                }
+                if game.units[prev].is_on_map() {
+                    game.screen = Screen::UnitDetail(prev);
+                    return;
+                }
+                if prev == 0 {
+                    prev = total - 1;
+                } else {
+                    prev -= 1;
+                }
+            }
+        }
+        KeyCode::Esc | KeyCode::Enter => {
+            game.screen = Screen::PhaseMenu;
+            game.cursor = 0;
         }
         _ => {}
     }
