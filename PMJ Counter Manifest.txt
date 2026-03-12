@@ -1,0 +1,32 @@
+PMJ Counter Manifest
+
+Format after Side: is ID - SP: X MP: X (Z) = Can switch sides (R) = have a reduced strength value (P) = Police/no offensive capability (C) = Deploy in cup
+
+Wagner: 
+
+Rusich - SP: 1
+Utkin - SP: 2
+Serb - SP: 1
+
+Russia:
+
+Mechanized Regiment - SP 3 MP: 4 (Z)(C)
+Motorized Infantry - SP: 1 MP: 3 (Z)(C)
+Armored Regiment - SP: 3 MP: 3 (Z)(C)
+OMON - SP: 2, MP: 2 (R)(P)
+Akhmat - SP: 2 MP: 2 (R)(C)
+FSB - SP: 2 MP: 2 (R)
+Helicopters - SP: 3 MP: 4 (R)(C)
+SOBR - SP: 2 MP: 2 (R)
+MOSpol - SP: 1 MP: 2 (P)(C)
+
+Markers:
+
+Game Turn
+Prigozhin Marker
+The People Are Silent (C)
+Road Block 1
+Road Block 2 (C)
+Rusich Manuever Combat
+Utkin Manuever Combat
+Serb Manuever Combat

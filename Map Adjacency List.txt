@@ -1,0 +1,17 @@
+PMJ Map Adjacency List
+
+Format is Location: Connected Location - (R) = River Crossing - (M) = M4 Route
+
+Rostov-On-Don: Grozny Akhmat Base (R), Bugaevka Border Point (M)
+Grozny Akhmat Base: Rostov-On-Don
+Bugaevka Border Point: Rostov-On-Don (R)(M), Voronezh (M)
+Voronezh: Bugaevka Border Point (M), Orel (R), Lipetsk (M), Tambov
+Orel: Kaluga, Tula, Lipetsk, Voronezh
+Lipetsk: Voronezh (M), Orel, Tula (M), Tambov
+Tambov: Voronezh, Lipetsk, Ryazan
+Kaluga: Orel, Tula, Oka River, Moscow, Rublevo
+Tula: Kaluga, Orel, Lipetsk (M), Oka River, Ryazan
+Ryazan: Tambov, Tula, Oka River
+Oka River: Kaluga, Tula (R)(M), Ryazan (R), Moscow (M) , Rublevo
+Rublevo: Kaluga, Oka River, Moscow
+Moscow: Rublevo, Kaluga, Oka River

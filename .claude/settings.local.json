@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd C:/Users/rweis/OneDrive/Documents/PMJ_Digital && mkdir -p python_prototype && mv ai.py combat.py crt.py game_state.py main.py map_data.py units.py utils.py __pycache__ python_prototype/ 2>/dev/null; ls)"
+    ]
+  }
+}
