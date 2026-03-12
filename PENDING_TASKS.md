@@ -13,7 +13,7 @@
 - [x] Flanking DRM in Contact
 - [x] Stacking enforcement (one side per location)
 
-## Phase 3: Remaining Rules
+## Phase 3: Remaining Rules — COMPLETE
 - [x] Police units — OMON/MOSpol cannot initiate attacks
 - [x] Roadblock movement cost — Wagner pays +1 MP to enter a roadblocked location
 - [x] Dispersal / GTT return — dispersed units return to home location next turn
@@ -21,9 +21,19 @@
 ## Phase 4: Polish — IN PROGRESS
 - [x] Halfblock unit symbols on map (▐R▌ ▐╳▌ etc., NATO-style, color-coded)
 - [x] Contact UI improvements (attacker toggle, flanking count display)
-- [x] Help screen / rules reference overlay (F1 or ?)
-- [x] Game over screen with narrative outcome text + restart
-- [ ] Unit detail popup / info panel
-- [ ] Status bar showing unit roster (all units, locations, SP)
-- [ ] Visual feedback on movement (highlight valid destinations)
+- [x] Help screen / rules reference overlay (? key)
+- [x] Game over screen with narrative outcome text + restart (R)
+- [x] Unit detail popup (Tab to open, Tab/Shift+Tab to cycle)
+- [x] Unit roster panel in right sidebar
+- [x] Movement destination highlights (green/red/dim on map)
+- [x] Key input fix (Press only, no Release/Repeat on Windows)
+- [x] Full-screen title and game over screens
+- [x] Map rework — full-name boxed labels, spread-out layout matching board
+- [ ] **Title screen overhaul** — flashy ASCII art, Russian flags, theme (reference Veridian Contraption)
+- [ ] Map position fine-tuning after playtesting
 - [ ] Sound or flash on combat results (if terminal supports it)
+
+## Uncommitted changes (need to commit + push)
+- app.rs: KeyEventKind::Press filter
+- ui.rs: full-screen title/gameover routing, phase menu hints, map label boxes
+- map.rs: new map_pos coordinates

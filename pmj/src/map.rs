@@ -96,20 +96,20 @@ impl Location {
     /// These approximate the physical map layout.
     pub fn map_pos(&self) -> (u16, u16) {
         match self {
-            // (col, row) — origin top-left
-            Location::Moscow =>              (30, 2),
-            Location::Rublevo =>             (20, 4),
-            Location::OkaRiver =>            (32, 7),
-            Location::Kaluga =>              (16, 9),
-            Location::Tula =>                (28, 11),
-            Location::Ryazan =>              (42, 10),
-            Location::Orel =>                (14, 15),
-            Location::Lipetsk =>             (30, 16),
-            Location::Tambov =>              (44, 16),
-            Location::Voronezh =>            (32, 22),
+            // (col, row) — origin top-left, spread to fill ~66×40 map panel
+            Location::Moscow =>              (35, 1),
+            Location::Rublevo =>             (18, 3),
+            Location::OkaRiver =>            (40, 5),
+            Location::Kaluga =>              (10, 8),
+            Location::Tula =>                (30, 9),
+            Location::Ryazan =>              (50, 8),
+            Location::Orel =>                (8, 15),
+            Location::Lipetsk =>             (30, 15),
+            Location::Tambov =>              (50, 15),
+            Location::Voronezh =>            (30, 22),
             Location::BugaevkaBorderPoint => (30, 28),
-            Location::RostovOnDon =>         (26, 33),
-            Location::GroznyAkhmatBase =>    (42, 35),
+            Location::RostovOnDon =>         (24, 34),
+            Location::GroznyAkhmatBase =>    (48, 36),
         }
     }
 }

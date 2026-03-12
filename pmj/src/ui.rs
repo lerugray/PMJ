@@ -28,7 +28,17 @@ const MOMENTUM_NEG: Color = Color::Rgb(200, 50, 50);     // Red
 
 /// Main render function — dispatches based on current screen.
 pub fn draw(f: &mut Frame, game: &GameState) {
-    // Overall layout: left (map) | right (status + menu)
+    // Title and Game Over screens are full-width
+    if matches!(game.screen, Screen::Title) {
+        draw_title(f, f.area());
+        return;
+    }
+    if let Screen::GameOver { wagner_wins } = game.screen {
+        draw_game_over(f, f.area(), wagner_wins);
+        return;
+    }
+
+    // Normal game layout: left (map) | right (status + menu)
     let outer = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
@@ -72,15 +82,15 @@ fn draw_map_panel(f: &mut Frame, game: &GameState, area: Rect) {
             '·'
         };
 
-        // Bresenham line between the two node centers (+2 to center on [XXX])
-        let points = bresenham_line(ax as i32 + 2, ay as i32, bx as i32 + 2, by as i32);
+        // Bresenham line between the two node centers (+5 to center on wider labels)
+        let points = bresenham_line(ax as i32 + 5, ay as i32 + 1, bx as i32 + 5, by as i32 + 1);
         for (px, py) in &points {
             let x = *px as u16;
             let y = *py as u16;
-            // Skip points too close to either node (within 3 chars of label)
-            let da = ((x as i32 - ax as i32 - 2).abs()).max((y as i32 - ay as i32).abs());
-            let db = ((x as i32 - bx as i32 - 2).abs()).max((y as i32 - by as i32).abs());
-            if da < 3 || db < 3 {
+            // Skip points too close to either node (within 6 chars of label box)
+            let da = ((x as i32 - ax as i32 - 5).abs()).max((y as i32 - ay as i32 - 1).abs());
+            let db = ((x as i32 - bx as i32 - 5).abs()).max((y as i32 - by as i32 - 1).abs());
+            if da < 6 || db < 6 {
                 continue;
             }
             if x < inner.width && y < inner.height {
@@ -138,7 +148,7 @@ fn draw_map_panel(f: &mut Frame, game: &GameState, area: Rect) {
     // Draw location nodes
     for loc in Location::all() {
         let (cx, cy) = loc.map_pos();
-        if cx + 4 >= inner.width || cy >= inner.height {
+        if cx + 16 >= inner.width || cy + 4 >= inner.height {
             continue;
         }
 
@@ -174,15 +184,29 @@ fn draw_map_panel(f: &mut Frame, game: &GameState, area: Rect) {
             Style::default().fg(LOC_COLOR)
         };
 
-        // Draw location box: [SHORT]
-        let label = format!("[{}]", loc.short());
-        let p = Paragraph::new(Line::from(Span::styled(label, label_style)));
-        f.render_widget(
-            p,
-            Rect::new(inner.x + cx, inner.y + cy, 5, 1),
-        );
+        // Draw location box with full name
+        let name = loc.name();
+        let display_name = if name.len() > 14 { &name[..14] } else { name };
+        let name_width = display_name.len() as u16 + 2; // +2 for box borders
 
-        // Draw unit indicators below the location (halfblock counter symbols)
+        if cx + name_width < inner.width && cy + 2 < inner.height {
+            // Top border
+            let top = format!("┌{}┐", "─".repeat(display_name.len()));
+            let p = Paragraph::new(Line::from(Span::styled(&top, label_style)));
+            f.render_widget(p, Rect::new(inner.x + cx, inner.y + cy, name_width, 1));
+
+            // Name
+            let mid = format!("│{}│", display_name);
+            let p = Paragraph::new(Line::from(Span::styled(&mid, label_style)));
+            f.render_widget(p, Rect::new(inner.x + cx, inner.y + cy + 1, name_width, 1));
+
+            // Bottom border
+            let bot = format!("└{}┘", "─".repeat(display_name.len()));
+            let p = Paragraph::new(Line::from(Span::styled(&bot, label_style)));
+            f.render_widget(p, Rect::new(inner.x + cx, inner.y + cy + 2, name_width, 1));
+        }
+
+        // Draw unit indicators below the location box (halfblock counter symbols)
         let mut unit_line = Vec::new();
         for &idx in &wagner_here {
             let u = &game.units[idx];
@@ -224,12 +248,12 @@ fn draw_map_panel(f: &mut Frame, game: &GameState, area: Rect) {
             ));
         }
 
-        if !unit_line.is_empty() && cy + 1 < inner.height {
+        if !unit_line.is_empty() && cy + 3 < inner.height {
             let width = unit_line.iter().map(|s| s.width() as u16).sum::<u16>();
             let p = Paragraph::new(Line::from(unit_line));
             f.render_widget(
                 p,
-                Rect::new(inner.x + cx.saturating_sub(1), inner.y + cy + 1, width.min(inner.width - cx), 1),
+                Rect::new(inner.x + cx.saturating_sub(1), inner.y + cy + 3, width.min(inner.width - cx), 1),
             );
         }
     }
@@ -689,7 +713,19 @@ fn draw_phase_menu(f: &mut Frame, game: &GameState, area: Rect) {
         ],
         _ => vec!["Continue".into()],
     };
-    draw_menu(f, "WAGNER ACTIONS", &labels, game.cursor, area);
+    let block = Block::default()
+        .title(" WAGNER ACTIONS ")
+        .title_style(Style::default().fg(HIGHLIGHT))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(DIM));
+    let mut items = menu_items(&labels, game.cursor);
+    items.push(ListItem::new(Line::from("")));
+    items.push(ListItem::new(Line::from(Span::styled(
+        "  ? Help   Tab Unit Info",
+        Style::default().fg(DIM),
+    ))));
+    let list = List::new(items).block(block);
+    f.render_widget(list, area);
 }
 
 fn draw_move_unit_menu(f: &mut Frame, game: &GameState, area: Rect) {

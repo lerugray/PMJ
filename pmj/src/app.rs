@@ -3,7 +3,7 @@
 use std::io;
 use std::time::Duration;
 
-use crossterm::event::{self, Event};
+use crossterm::event::{self, Event, KeyEventKind};
 use ratatui::{backend::CrosstermBackend, Terminal};
 
 use crate::game::GameState;
@@ -32,9 +32,12 @@ pub fn run() -> io::Result<()> {
         // Poll for events with a timeout (allows future animation)
         if event::poll(Duration::from_millis(100))? {
             if let Event::Key(key) = event::read()? {
-                let should_quit = input::handle_key(&mut game, key);
-                if should_quit {
-                    break;
+                // Only handle key press events (ignore release/repeat on Windows)
+                if key.kind == KeyEventKind::Press {
+                    let should_quit = input::handle_key(&mut game, key);
+                    if should_quit {
+                        break;
+                    }
                 }
             }
         }
