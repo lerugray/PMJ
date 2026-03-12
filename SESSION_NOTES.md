@@ -4,6 +4,7 @@
 
 ### Summary
 Built complete Rust TUI game engine from scratch. Game is playable end-to-end.
+Repo pushed to https://github.com/lerugray/PMJ
 
 ### All modules (pmj/src/, ~2800 lines total)
 - `main.rs` + `app.rs` — Entry point, terminal setup, event loop
@@ -25,22 +26,12 @@ Built complete Rust TUI game engine from scratch. Game is playable end-to-end.
 - Map: Bresenham line drawing, color-coded nodes/units, roadblock markers (⊘)
 - Scrollable action log
 
-### Git commits (master)
-1. `fe4c107` Initial commit: full engine
-2. `4ebce12` Russian AI, flanking, stacking, project reorg
-3. `edc823b` Map line drawing, roadblocks, polish
-4. `8af4f30` Title screen
-5. `ab1b114` Session notes update
-
-### Design note from Ray
-Use halfblock NATO-style unit symbols on the map: `▐╳▌` for infantry, etc. (from another project)
-
-### What's next (Session 2)
-- Apply ▐╳▌ halfblock unit symbols to map display
-- Police units enforcement (OMON/MOSpol cannot attack)
-- Dispersal / GTT return mechanic (units return next turn)
-- Two-player mode (section 11.0)
-- Help screen / rules reference (F1/?)
-- Game over narrative screen
-- Contact UI: let player choose individual attackers, show flanking count
-- General UI polish
+### What's next (Session 2 — priority order)
+1. **Halfblock unit symbols on map** — Wagner: `▐R▌` `▐U▌` `▐S▌` (letter initials), Russia: `▐╳▌` (NATO infantry), color-coded red/blue. See memory for details.
+2. Police units enforcement (OMON/MOSpol cannot initiate attacks)
+3. Dispersal / GTT return mechanic (units return to map next turn)
+4. Contact UI improvements (choose individual attackers, show flanking count)
+5. Help screen / rules reference (F1/?)
+6. Game over narrative screen
+7. Two-player mode (section 11.0)
+8. General UI polish
