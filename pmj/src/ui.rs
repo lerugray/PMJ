@@ -49,35 +49,65 @@ fn draw_map_panel(f: &mut Frame, game: &GameState, area: Rect) {
     let inner = block.inner(area);
     f.render_widget(block, area);
 
-    // Draw edges first (lines between locations)
-    let mut lines_buf: Vec<(u16, u16, char, Style)> = Vec::new();
+    // Draw edges as lines between locations using Bresenham's algorithm
     for (a, b, props) in game.map.all_edges() {
         let (ax, ay) = a.map_pos();
         let (bx, by) = b.map_pos();
         let style = if props.m4 {
-            Style::default().fg(M4_COLOR).add_modifier(Modifier::BOLD)
+            Style::default().fg(M4_COLOR)
         } else if props.river {
             Style::default().fg(RIVER_COLOR)
         } else {
             Style::default().fg(ROAD_COLOR)
         };
 
-        // Simple line drawing: just mark midpoint with a connector char
-        let mx = (ax + bx) / 2;
-        let my = (ay + by) / 2;
-        let ch = if props.river { '~' } else if props.m4 { '=' } else { '-' };
-        lines_buf.push((mx, my, ch, style));
-    }
+        // Choose line character based on edge type
+        let base_ch = if props.m4 && props.river {
+            '≈'
+        } else if props.m4 {
+            '·'
+        } else if props.river {
+            '~'
+        } else {
+            '·'
+        };
 
-    // Render edge midpoints
-    for (x, y, ch, style) in &lines_buf {
-        if *x < inner.width && *y < inner.height {
-            let span = Span::styled(ch.to_string(), *style);
-            let p = Paragraph::new(Line::from(span));
-            f.render_widget(
-                p,
-                Rect::new(inner.x + x, inner.y + y, 1, 1),
-            );
+        // Bresenham line between the two node centers (+2 to center on [XXX])
+        let points = bresenham_line(ax as i32 + 2, ay as i32, bx as i32 + 2, by as i32);
+        for (px, py) in &points {
+            let x = *px as u16;
+            let y = *py as u16;
+            // Skip points too close to either node (within 3 chars of label)
+            let da = ((x as i32 - ax as i32 - 2).abs()).max((y as i32 - ay as i32).abs());
+            let db = ((x as i32 - bx as i32 - 2).abs()).max((y as i32 - by as i32).abs());
+            if da < 3 || db < 3 {
+                continue;
+            }
+            if x < inner.width && y < inner.height {
+                // Pick directional char based on slope at this point
+                let ch = if props.m4 || props.river {
+                    base_ch
+                } else {
+                    base_ch
+                };
+                let span = Span::styled(ch.to_string(), style);
+                let p = Paragraph::new(Line::from(span));
+                f.render_widget(p, Rect::new(inner.x + x, inner.y + y, 1, 1));
+            }
+        }
+
+        // Add river marker '~' at midpoint for river crossings (extra visual cue)
+        if props.river {
+            let mx = ((ax + bx) / 2) as u16 + 1;
+            let my = ((ay + by) / 2) as u16;
+            if mx < inner.width && my < inner.height {
+                let span = Span::styled(
+                    "≋",
+                    Style::default().fg(RIVER_COLOR).add_modifier(Modifier::BOLD),
+                );
+                let p = Paragraph::new(Line::from(span));
+                f.render_widget(p, Rect::new(inner.x + mx, inner.y + my, 1, 1));
+            }
         }
     }
 
@@ -128,6 +158,15 @@ fn draw_map_panel(f: &mut Frame, game: &GameState, area: Rect) {
             unit_line.push(Span::styled(
                 format!("{}{}{} ", u.id.short(), sp, reduced),
                 Style::default().fg(RUSSIA_COLOR),
+            ));
+        }
+
+        // Add roadblock indicator
+        let has_roadblock = game.roadblocks[0] == Some(*loc) || game.roadblocks[1] == Some(*loc);
+        if has_roadblock {
+            unit_line.push(Span::styled(
+                "⊘ ",
+                Style::default().fg(Color::Rgb(255, 140, 0)).add_modifier(Modifier::BOLD),
             ));
         }
 
@@ -846,4 +885,34 @@ fn draw_log(f: &mut Frame, game: &GameState, area: Rect) {
         .collect();
     let list = List::new(items);
     f.render_widget(list, inner);
+}
+
+// ── Bresenham line drawing ───────────────────────────────────────────────
+
+fn bresenham_line(x0: i32, y0: i32, x1: i32, y1: i32) -> Vec<(i32, i32)> {
+    let mut points = Vec::new();
+    let dx = (x1 - x0).abs();
+    let dy = -(y1 - y0).abs();
+    let sx = if x0 < x1 { 1 } else { -1 };
+    let sy = if y0 < y1 { 1 } else { -1 };
+    let mut err = dx + dy;
+    let mut x = x0;
+    let mut y = y0;
+
+    loop {
+        points.push((x, y));
+        if x == x1 && y == y1 {
+            break;
+        }
+        let e2 = 2 * err;
+        if e2 >= dy {
+            err += dy;
+            x += sx;
+        }
+        if e2 <= dx {
+            err += dx;
+            y += sy;
+        }
+    }
+    points
 }

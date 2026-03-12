@@ -252,6 +252,12 @@ impl GameState {
         if edge.river && !self.units[idx].is_helicopter() {
             cost += 1;
         }
+        // Roadblock: Wagner pays +1 MP to enter a roadblocked location
+        if self.units[idx].is_wagner() {
+            if self.roadblocks[0] == Some(to) || self.roadblocks[1] == Some(to) {
+                cost += 1;
+            }
+        }
         Some(cost)
     }
 
