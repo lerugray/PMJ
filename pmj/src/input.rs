@@ -8,14 +8,6 @@ use crate::units::UnitId;
 
 /// Process a key event. Returns true if the app should quit.
 pub fn handle_key(game: &mut GameState, key: KeyEvent) -> bool {
-    // Global: Q to quit from game over
-    if matches!(game.screen, Screen::GameOver { .. }) {
-        if matches!(key.code, KeyCode::Char('q') | KeyCode::Char('Q')) {
-            return true;
-        }
-        return false;
-    }
-
     match &game.screen.clone() {
         Screen::Title => {
             match key.code {
@@ -33,6 +25,12 @@ pub fn handle_key(game: &mut GameState, key: KeyEvent) -> bool {
         Screen::ContactSelectTarget { from_loc } => {
             handle_contact_select_target(game, key, *from_loc)
         }
+        Screen::ContactSelectAttackers {
+            from_loc,
+            target_loc,
+            available,
+            selected,
+        } => handle_contact_select_attackers(game, key, *from_loc, *target_loc, available.clone(), selected.clone()),
         Screen::ContactConfirm {
             from_loc,
             target_loc,
@@ -48,7 +46,14 @@ pub fn handle_key(game: &mut GameState, key: KeyEvent) -> bool {
         Screen::RussianPhaseDisplay => handle_russian_phase(game, key),
         Screen::EndTurnConfirm => handle_end_turn(game, key),
         Screen::ViewLog => handle_view_log(game, key),
-        Screen::GameOver { .. } => {}
+        Screen::HelpScreen => handle_help_screen(game, key),
+        Screen::GameOver { .. } => {
+            match key.code {
+                KeyCode::Char('q') | KeyCode::Char('Q') => return true,
+                KeyCode::Char('r') | KeyCode::Char('R') => game.restart(),
+                _ => {}
+            }
+        }
     }
 
     false
@@ -177,6 +182,21 @@ fn handle_phase_menu(game: &mut GameState, key: KeyEvent) {
                 }
                 _ => {}
             }
+        }
+        KeyCode::F(1) | KeyCode::Char('?') => {
+            game.screen = Screen::HelpScreen;
+        }
+        _ => {}
+    }
+}
+
+// ── Help Screen ──────────────────────────────────────────────────────────
+
+fn handle_help_screen(game: &mut GameState, key: KeyEvent) {
+    match key.code {
+        KeyCode::Esc | KeyCode::F(1) | KeyCode::Char('?') => {
+            game.screen = Screen::PhaseMenu;
+            game.cursor = 0;
         }
         _ => {}
     }
@@ -307,7 +327,77 @@ fn handle_contact_select_target(game: &mut GameState, key: KeyEvent, from_loc: L
                 game.cursor = 0;
             } else {
                 let target_loc = targets[game.cursor];
-                let attacker_indices = game.wagner_units_at(from_loc);
+                let available: Vec<usize> = game.wagner_units_at(from_loc)
+                    .into_iter()
+                    .filter(|&i| !game.units[i].police)
+                    .collect();
+                let selected = vec![true; available.len()];
+                game.screen = Screen::ContactSelectAttackers {
+                    from_loc,
+                    target_loc,
+                    available,
+                    selected,
+                };
+                game.cursor = 0;
+            }
+        }
+        KeyCode::Esc => {
+            game.screen = Screen::ContactSelectLocation;
+            game.cursor = 0;
+        }
+        _ => {}
+    }
+}
+
+fn handle_contact_select_attackers(
+    game: &mut GameState,
+    key: KeyEvent,
+    from_loc: Location,
+    target_loc: Location,
+    available: Vec<usize>,
+    mut selected: Vec<bool>,
+) {
+    let count = available.len() + 1; // +1 for "Confirm" row
+    match key.code {
+        KeyCode::Up | KeyCode::Char('k') => cursor_up(game, count),
+        KeyCode::Down | KeyCode::Char('j') => cursor_down(game, count),
+        KeyCode::Char(' ') | KeyCode::Enter => {
+            if game.cursor < available.len() {
+                // Toggle this unit
+                selected[game.cursor] = !selected[game.cursor];
+                game.screen = Screen::ContactSelectAttackers {
+                    from_loc,
+                    target_loc,
+                    available,
+                    selected,
+                };
+            } else {
+                // Confirm row — proceed if at least one selected
+                let attacker_indices: Vec<usize> = available
+                    .iter()
+                    .zip(selected.iter())
+                    .filter(|(_, &sel)| sel)
+                    .map(|(&idx, _)| idx)
+                    .collect();
+                if !attacker_indices.is_empty() {
+                    game.screen = Screen::ContactConfirm {
+                        from_loc,
+                        target_loc,
+                        attacker_indices,
+                    };
+                    game.cursor = 0;
+                }
+            }
+        }
+        KeyCode::Char('c') | KeyCode::Char('C') => {
+            // Quick confirm shortcut
+            let attacker_indices: Vec<usize> = available
+                .iter()
+                .zip(selected.iter())
+                .filter(|(_, &sel)| sel)
+                .map(|(&idx, _)| idx)
+                .collect();
+            if !attacker_indices.is_empty() {
                 game.screen = Screen::ContactConfirm {
                     from_loc,
                     target_loc,
@@ -317,7 +407,7 @@ fn handle_contact_select_target(game: &mut GameState, key: KeyEvent, from_loc: L
             }
         }
         KeyCode::Esc => {
-            game.screen = Screen::ContactSelectLocation;
+            game.screen = Screen::ContactSelectTarget { from_loc };
             game.cursor = 0;
         }
         _ => {}

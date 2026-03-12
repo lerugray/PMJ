@@ -37,6 +37,13 @@ pub enum Screen {
     ContactSelectTarget {
         from_loc: Location,
     },
+    /// Selecting which attackers participate in contact.
+    ContactSelectAttackers {
+        from_loc: Location,
+        target_loc: Location,
+        available: Vec<usize>,  // unit indices available to attack
+        selected: Vec<bool>,    // which ones are toggled on
+    },
     /// Confirming contact resolution.
     ContactConfirm {
         from_loc: Location,
@@ -60,6 +67,8 @@ pub enum Screen {
     EndTurnConfirm,
     /// Showing the action log.
     ViewLog,
+    /// Help / rules reference overlay.
+    HelpScreen,
     /// Game over screen.
     GameOver { wagner_wins: bool },
 }
@@ -135,6 +144,11 @@ impl GameState {
             wagner_eliminated_this_turn: false,
             admin_units_adjusted: [false; 3],
         }
+    }
+
+    /// Reset the game to a fresh initial state.
+    pub fn restart(&mut self) {
+        *self = GameState::new();
     }
 
     // ── Logging ──────────────────────────────────────────────────────────
@@ -333,7 +347,7 @@ impl GameState {
     // ── Contact ──────────────────────────────────────────────────────────
 
     /// Count flanking locations: other Wagner-occupied locations adjacent to target (max 2).
-    fn count_flanking(&self, primary_loc: Location, target_loc: Location) -> i32 {
+    pub fn count_flanking(&self, primary_loc: Location, target_loc: Location) -> i32 {
         let mut count = 0;
         for &(neighbor, _) in self.map.neighbors(target_loc) {
             if neighbor == primary_loc {
@@ -350,6 +364,13 @@ impl GameState {
     pub fn contact_opportunities(&self) -> Vec<(Location, Vec<Location>)> {
         let mut results = Vec::new();
         for wloc in self.wagner_locations() {
+            // Police units cannot initiate contact
+            let has_attacker = self.wagner_units_at(wloc)
+                .iter()
+                .any(|&i| !self.units[i].police);
+            if !has_attacker {
+                continue;
+            }
             let mut targets = Vec::new();
             for &(neighbor, _) in self.map.neighbors(wloc) {
                 if !self.russian_units_at(neighbor).is_empty() {
@@ -595,6 +616,7 @@ impl GameState {
             self.record(format!("{} retreated to {}", name, dest.name()));
         } else {
             self.units[idx].location = None;
+            self.units[idx].dispersed = true;
             self.record(format!("{} DISPERSED (no retreat path)", name));
         }
     }
@@ -637,6 +659,20 @@ impl GameState {
     // ── Turn Management ──────────────────────────────────────────────────
 
     pub fn start_administration(&mut self) {
+        // Return dispersed units to their home location
+        for i in 0..self.units.len() {
+            if self.units[i].dispersed {
+                let name = self.units[i].id.name().to_string();
+                let home = if self.units[i].is_wagner() {
+                    Location::RostovOnDon
+                } else {
+                    Location::Moscow
+                };
+                self.units[i].location = Some(home);
+                self.units[i].dispersed = false;
+                self.record(format!("{} returns from dispersal to {}", name, home.name()));
+            }
+        }
         self.phase = Phase::Administration;
         self.screen = Screen::MctSelect;
         self.cursor = 0;

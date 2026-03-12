@@ -1,37 +1,24 @@
 # PMJ Digital — Session Notes
 
-## Session 1 — 2026-03-12
+## Session 2 — 2026-03-12
 
 ### Summary
-Built complete Rust TUI game engine from scratch. Game is playable end-to-end.
-Repo pushed to https://github.com/lerugray/PMJ
+Implemented three features from the Session 1 priority list: halfblock unit symbols, police unit restrictions, and dispersal/GTT return mechanic.
 
-### All modules (pmj/src/, ~2800 lines total)
-- `main.rs` + `app.rs` — Entry point, terminal setup, event loop
-- `map.rs` — 13 locations, edges (river/M4), adjacency, LOC tracing, BFS pathfinding
-- `units.rs` — 12 counters from manifest, Side enum, reduction/elimination
-- `mct.rs` — 5-step MCT (SP+3/MP0 → SP+0/MP4), starting at step 2
-- `combat.rs` — Full CRT (8x13 const array), force ratio shifts, all DRMs
-- `game.rs` — GameState: complete game logic including full Russian AI
-- `ui.rs` — Full TUI: title screen, map with Bresenham lines, panels, menus
-- `input.rs` — Keyboard handling for all screens
+### Changes made
+1. **Halfblock unit symbols on map** — Wagner units show as `▐R▌` `▐U▌` `▐S▌`, Russian units show NATO-style symbols: infantry `▐╳▌`, armor `▐◇▌`, helicopters `▐H▌`, security `▐█▌`. SP number displayed after each counter. Reduced units shown in dimmed colors. Added `nato_symbol()` method to UnitId.
+2. **Police units enforcement** — OMON and MOSpol (police=true) cannot initiate attacks. Filtered out of `contact_opportunities()` in game.rs and `attacker_indices` in input.rs. Russian AI already had this filter.
+3. **Dispersal / GTT return** — Added `dispersed: bool` field to Unit struct. When a unit has no retreat path, it's marked dispersed (not eliminated). At the start of each turn (`start_administration`), dispersed units return to their home location (Rostov for Wagner, Moscow for Russia).
 
-### Features implemented
-- Title screen with Pushkin quote
-- Administration Phase: MCT adjustment per Wagner unit
-- Wagner Turn: movement (stacking, river, roadblock costs), Contact (CRT + flanking DRM), Advance After Contact
-- Russian AI Phase: Moscow mobilization, momentum expenditure (3 tiers), roadblock deployment, RAPT attacks + movement toward Moscow, Akhmat Tik Tok roll
-- End Turn: all 8 momentum adjustment questions from rulebook 8.1
-- Victory: LOC tracing along M4
-- Map: Bresenham line drawing, color-coded nodes/units, roadblock markers (⊘)
-- Scrollable action log
+### Files modified
+- `pmj/src/units.rs` — Added `nato_symbol()`, added `dispersed` field
+- `pmj/src/ui.rs` — Replaced text unit labels with halfblock counter rendering
+- `pmj/src/game.rs` — Police filter in contact_opportunities, dispersal return in start_administration, dispersed flag in retreat_unit
+- `pmj/src/input.rs` — Police filter in attacker_indices
 
-### What's next (Session 2 — priority order)
-1. **Halfblock unit symbols on map** — Wagner: `▐R▌` `▐U▌` `▐S▌` (letter initials), Russia: `▐╳▌` (NATO infantry), color-coded red/blue. See memory for details.
-2. Police units enforcement (OMON/MOSpol cannot initiate attacks)
-3. Dispersal / GTT return mechanic (units return to map next turn)
-4. Contact UI improvements (choose individual attackers, show flanking count)
-5. Help screen / rules reference (F1/?)
-6. Game over narrative screen
-7. Two-player mode (section 11.0)
-8. General UI polish
+### What's next (Session 3 — priority order)
+1. Contact UI improvements (choose individual attackers, show flanking count)
+2. Help screen / rules reference (F1/?)
+3. Game over narrative screen
+4. Two-player mode (section 11.0)
+5. General UI polish

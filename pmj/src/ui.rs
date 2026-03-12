@@ -140,24 +140,36 @@ fn draw_map_panel(f: &mut Frame, game: &GameState, area: Rect) {
             Rect::new(inner.x + cx, inner.y + cy, 5, 1),
         );
 
-        // Draw unit indicators below the location
+        // Draw unit indicators below the location (halfblock counter symbols)
         let mut unit_line = Vec::new();
         for &idx in &wagner_here {
             let u = &game.units[idx];
             let sp = game.effective_sp(idx);
-            let reduced = if u.is_reduced { "r" } else { "" };
+            let fg = if u.is_reduced { Color::Rgb(160, 40, 40) } else { WAGNER_COLOR };
+            unit_line.push(Span::styled("▐", Style::default().fg(fg)));
             unit_line.push(Span::styled(
-                format!("{}{}{} ", u.id.short(), sp, reduced),
-                Style::default().fg(WAGNER_COLOR),
+                u.id.nato_symbol().to_string(),
+                Style::default().fg(Color::White).bg(fg),
+            ));
+            unit_line.push(Span::styled("▌", Style::default().fg(fg)));
+            unit_line.push(Span::styled(
+                format!("{} ", sp),
+                Style::default().fg(fg),
             ));
         }
         for &idx in &russian_here {
             let u = &game.units[idx];
             let sp = game.effective_sp(idx);
-            let reduced = if u.is_reduced { "r" } else { "" };
+            let fg = if u.is_reduced { Color::Rgb(50, 100, 160) } else { RUSSIA_COLOR };
+            unit_line.push(Span::styled("▐", Style::default().fg(fg)));
             unit_line.push(Span::styled(
-                format!("{}{}{} ", u.id.short(), sp, reduced),
-                Style::default().fg(RUSSIA_COLOR),
+                u.id.nato_symbol().to_string(),
+                Style::default().fg(Color::White).bg(fg),
+            ));
+            unit_line.push(Span::styled("▌", Style::default().fg(fg)));
+            unit_line.push(Span::styled(
+                format!("{} ", sp),
+                Style::default().fg(fg),
             ));
         }
 
@@ -347,6 +359,12 @@ fn draw_content(f: &mut Frame, game: &GameState, area: Rect) {
         Screen::ContactSelectTarget { from_loc } => {
             draw_contact_target_menu(f, game, area, *from_loc)
         }
+        Screen::ContactSelectAttackers {
+            from_loc,
+            target_loc,
+            available,
+            selected,
+        } => draw_contact_select_attackers(f, game, area, *from_loc, *target_loc, available, selected),
         Screen::ContactConfirm {
             from_loc,
             target_loc,
@@ -364,6 +382,7 @@ fn draw_content(f: &mut Frame, game: &GameState, area: Rect) {
         Screen::RussianPhaseDisplay => draw_russian_phase(f, game, area),
         Screen::EndTurnConfirm => draw_end_turn(f, game, area),
         Screen::ViewLog => draw_full_log(f, game, area),
+        Screen::HelpScreen => draw_help_screen(f, area),
         Screen::GameOver { wagner_wins } => draw_game_over(f, area, *wagner_wins),
     }
 }
@@ -646,6 +665,76 @@ fn draw_contact_target_menu(
     draw_menu(f, "CONTACT: Select Target", &labels, game.cursor, area);
 }
 
+fn draw_contact_select_attackers(
+    f: &mut Frame,
+    game: &GameState,
+    area: Rect,
+    _from_loc: Location,
+    _target_loc: Location,
+    available: &[usize],
+    selected: &[bool],
+) {
+    let mut items: Vec<ListItem> = Vec::new();
+    let selected_count: usize = selected.iter().filter(|&&s| s).count();
+
+    for (i, &unit_idx) in available.iter().enumerate() {
+        let unit = &game.units[unit_idx];
+        let sp = game.effective_sp(unit_idx);
+        let mp_rem = game.mp_remaining(unit_idx);
+        let mp_max = game.effective_mp(unit_idx);
+        let check = if selected[i] { "[X]" } else { "[ ]" };
+
+        let is_cursor = i == game.cursor;
+        let style = if is_cursor {
+            Style::default().fg(HIGHLIGHT).add_modifier(Modifier::BOLD)
+        } else if selected[i] {
+            Style::default().fg(WAGNER_COLOR)
+        } else {
+            Style::default().fg(DIM)
+        };
+        let prefix = if is_cursor { "► " } else { "  " };
+        items.push(ListItem::new(Line::from(Span::styled(
+            format!("{}{} {} SP:{} MP:{}/{}", prefix, check, unit.id.name(), sp, mp_rem, mp_max),
+            style,
+        ))));
+    }
+
+    // Confirm row
+    let confirm_cursor = game.cursor == available.len();
+    let confirm_style = if confirm_cursor {
+        if selected_count > 0 {
+            Style::default().fg(HIGHLIGHT).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(DIM)
+        }
+    } else if selected_count > 0 {
+        Style::default().fg(Color::White)
+    } else {
+        Style::default().fg(DIM)
+    };
+    let prefix = if confirm_cursor { "► " } else { "  " };
+    items.push(ListItem::new(Line::from("")));
+    items.push(ListItem::new(Line::from(Span::styled(
+        format!("{}Confirm Attack", prefix),
+        confirm_style,
+    ))));
+
+    // Hint line
+    items.push(ListItem::new(Line::from("")));
+    items.push(ListItem::new(Line::from(Span::styled(
+        "  Space/Enter: toggle   C: confirm   Esc: back",
+        Style::default().fg(DIM),
+    ))));
+
+    let block = Block::default()
+        .title(" SELECT ATTACKERS ")
+        .title_style(Style::default().fg(HIGHLIGHT))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(DIM));
+    let list = List::new(items).block(block);
+    f.render_widget(list, area);
+}
+
 fn draw_contact_confirm(
     f: &mut Frame,
     game: &GameState,
@@ -685,6 +774,13 @@ fn draw_contact_confirm(
             format!("Momentum DRM: {:+}", game.momentum),
             Style::default().fg(if game.momentum > 0 { MOMENTUM_POS } else { MOMENTUM_NEG }),
         )),
+        {
+            let flanking = game.count_flanking(from_loc, target_loc);
+            Line::from(Span::styled(
+                format!("Flanking locations: {} (DRM: {:+})", flanking, flanking),
+                Style::default().fg(if flanking > 0 { MOMENTUM_POS } else { DIM }),
+            ))
+        },
         Line::from(""),
         Line::from(Span::styled(
             "Enter → Resolve Contact    Esc → Cancel",
@@ -887,39 +983,231 @@ fn draw_full_log(f: &mut Frame, game: &GameState, area: Rect) {
     f.render_widget(list, inner);
 }
 
-fn draw_game_over(f: &mut Frame, area: Rect, wagner_wins: bool) {
-    let (msg, color) = if wagner_wins {
-        (
-            "WAGNER VICTORY! LOC traced from Moscow to Rostov along M4.",
-            MOMENTUM_POS,
-        )
-    } else {
-        (
-            "Turn 6 complete. Lukashenko brokers 'amnesty' in Belarus. Wagner does not achieve victory.",
-            RUSSIA_COLOR,
-        )
-    };
-
+fn draw_help_screen(f: &mut Frame, area: Rect) {
     let lines = vec![
-        Line::from(""),
         Line::from(Span::styled(
-            "GAME OVER",
-            Style::default()
-                .fg(color)
-                .add_modifier(Modifier::BOLD),
+            "PRIGOZHIN'S MARCH OF JUSTICE — Quick Reference",
+            Style::default().fg(HIGHLIGHT).add_modifier(Modifier::BOLD),
         )),
         Line::from(""),
-        Line::from(Span::styled(msg, Style::default().fg(color))),
+        Line::from(Span::styled(
+            "June 23, 2023: Wagner PMC marches on Moscow along the M4 highway.",
+            Style::default().fg(Color::White),
+        )),
         Line::from(""),
         Line::from(Span::styled(
-            "Q → Quit",
+            "─── KEY BINDINGS ───",
+            Style::default().fg(M4_COLOR).add_modifier(Modifier::BOLD),
+        )),
+        Line::from(vec![
+            Span::styled("  Arrows / j,k ", Style::default().fg(HIGHLIGHT)),
+            Span::styled("Navigate menus", Style::default().fg(Color::White)),
+        ]),
+        Line::from(vec![
+            Span::styled("  Enter        ", Style::default().fg(HIGHLIGHT)),
+            Span::styled("Select / Confirm", Style::default().fg(Color::White)),
+        ]),
+        Line::from(vec![
+            Span::styled("  Esc          ", Style::default().fg(HIGHLIGHT)),
+            Span::styled("Go back", Style::default().fg(Color::White)),
+        ]),
+        Line::from(vec![
+            Span::styled("  Space        ", Style::default().fg(HIGHLIGHT)),
+            Span::styled("Toggle attacker selection", Style::default().fg(Color::White)),
+        ]),
+        Line::from(vec![
+            Span::styled("  Y / N        ", Style::default().fg(HIGHLIGHT)),
+            Span::styled("Answer prompts", Style::default().fg(Color::White)),
+        ]),
+        Line::from(vec![
+            Span::styled("  F1 / ?       ", Style::default().fg(HIGHLIGHT)),
+            Span::styled("This help screen", Style::default().fg(Color::White)),
+        ]),
+        Line::from(vec![
+            Span::styled("  Q            ", Style::default().fg(HIGHLIGHT)),
+            Span::styled("Quit game", Style::default().fg(Color::White)),
+        ]),
+        Line::from(""),
+        Line::from(Span::styled(
+            "─── TURN SEQUENCE ───",
+            Style::default().fg(M4_COLOR).add_modifier(Modifier::BOLD),
+        )),
+        Line::from(vec![
+            Span::styled("  1. ", Style::default().fg(HIGHLIGHT)),
+            Span::styled("Administration", Style::default().fg(Color::White)),
+            Span::styled(" — adjust each Wagner unit's MCT position", Style::default().fg(DIM)),
+        ]),
+        Line::from(vec![
+            Span::styled("  2. ", Style::default().fg(HIGHLIGHT)),
+            Span::styled("Wagner Turn", Style::default().fg(WAGNER_COLOR)),
+            Span::styled(" — move units, initiate contact (attacks)", Style::default().fg(DIM)),
+        ]),
+        Line::from(vec![
+            Span::styled("  3. ", Style::default().fg(HIGHLIGHT)),
+            Span::styled("Russian AI", Style::default().fg(RUSSIA_COLOR)),
+            Span::styled(" — mobilization, movement, roadblocks, attacks", Style::default().fg(DIM)),
+        ]),
+        Line::from(vec![
+            Span::styled("  4. ", Style::default().fg(HIGHLIGHT)),
+            Span::styled("End Turn", Style::default().fg(Color::White)),
+            Span::styled(" — momentum adjustments, advance turn counter", Style::default().fg(DIM)),
+        ]),
+        Line::from(""),
+        Line::from(Span::styled(
+            "─── CONTACT RESOLUTION ───",
+            Style::default().fg(M4_COLOR).add_modifier(Modifier::BOLD),
+        )),
+        Line::from(Span::styled(
+            "  CD = Attacker SP - Defender SP (Contact Differential)",
+            Style::default().fg(Color::White),
+        )),
+        Line::from(Span::styled(
+            "  DRMs: Momentum, Flanking (+1 per extra adjacent loc), River (-1)",
+            Style::default().fg(DIM),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            "─── MANEUVER/COMBAT TRACK (MCT) ───",
+            Style::default().fg(M4_COLOR).add_modifier(Modifier::BOLD),
+        )),
+        Line::from(Span::styled(
+            "  Higher position = more SP (combat power), fewer MP (movement)",
+            Style::default().fg(Color::White),
+        )),
+        Line::from(Span::styled(
+            "  Lower position  = fewer SP, more MP (faster movement)",
+            Style::default().fg(Color::White),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            "─── VICTORY ───",
+            Style::default().fg(M4_COLOR).add_modifier(Modifier::BOLD),
+        )),
+        Line::from(Span::styled(
+            "  Wagner wins by tracing a Line of Communication (LOC) along",
+            Style::default().fg(WAGNER_COLOR),
+        )),
+        Line::from(Span::styled(
+            "  the M4 highway from Moscow to Rostov-On-Don, with no",
+            Style::default().fg(WAGNER_COLOR),
+        )),
+        Line::from(Span::styled(
+            "  uncontested Russian units blocking the route.",
+            Style::default().fg(WAGNER_COLOR),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            "Press Esc or ? to return",
             Style::default().fg(HIGHLIGHT),
         )),
     ];
 
     let block = Block::default()
+        .title(" HELP — Rules Reference (F1) ")
+        .title_style(Style::default().fg(HIGHLIGHT).add_modifier(Modifier::BOLD))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(M4_COLOR));
+    let p = Paragraph::new(lines).block(block).wrap(Wrap { trim: false });
+    f.render_widget(p, area);
+}
+
+fn draw_game_over(f: &mut Frame, area: Rect, wagner_wins: bool) {
+    let lines = if wagner_wins {
+        vec![
+            Line::from(""),
+            Line::from(Span::styled(
+                "WAGNER VICTORY",
+                Style::default().fg(HIGHLIGHT).add_modifier(Modifier::BOLD),
+            )),
+            Line::from(""),
+            Line::from(Span::styled(
+                "Wagner forces have secured a continuous Line of Communication",
+                Style::default().fg(WAGNER_COLOR),
+            )),
+            Line::from(Span::styled(
+                "along the M4 highway from Moscow to Rostov-On-Don.",
+                Style::default().fg(WAGNER_COLOR),
+            )),
+            Line::from(""),
+            Line::from(Span::styled(
+                "Prigozhin's march on Moscow succeeds — the Russian military",
+                Style::default().fg(Color::White),
+            )),
+            Line::from(Span::styled(
+                "establishment is thrown into chaos. The world watches in",
+                Style::default().fg(Color::White),
+            )),
+            Line::from(Span::styled(
+                "disbelief as a private military company brings a nuclear",
+                Style::default().fg(Color::White),
+            )),
+            Line::from(Span::styled(
+                "superpower to its knees.",
+                Style::default().fg(Color::White),
+            )),
+            Line::from(""),
+            Line::from(Span::styled(
+                "History has been rewritten.",
+                Style::default().fg(DIM).add_modifier(Modifier::ITALIC),
+            )),
+            Line::from(""),
+            Line::from(Span::styled(
+                "Press Q to quit  |  Press R to restart",
+                Style::default().fg(HIGHLIGHT),
+            )),
+        ]
+    } else {
+        vec![
+            Line::from(""),
+            Line::from(Span::styled(
+                "THE MARCH ENDS",
+                Style::default().fg(HIGHLIGHT).add_modifier(Modifier::BOLD),
+            )),
+            Line::from(""),
+            Line::from(Span::styled(
+                "Turn 6 complete. Wagner forces have failed to secure a",
+                Style::default().fg(RUSSIA_COLOR),
+            )),
+            Line::from(Span::styled(
+                "continuous Line of Communication along the M4.",
+                Style::default().fg(RUSSIA_COLOR),
+            )),
+            Line::from(""),
+            Line::from(Span::styled(
+                "Lukashenko brokers an \"amnesty\" — Prigozhin agrees to stand",
+                Style::default().fg(Color::White),
+            )),
+            Line::from(Span::styled(
+                "down and relocate to Belarus. The March of Justice ends not",
+                Style::default().fg(Color::White),
+            )),
+            Line::from(Span::styled(
+                "with a bang, but with a phone call.",
+                Style::default().fg(Color::White),
+            )),
+            Line::from(""),
+            Line::from(Span::styled(
+                "As in history, the rebellion fades. But for 24 hours,",
+                Style::default().fg(DIM).add_modifier(Modifier::ITALIC),
+            )),
+            Line::from(Span::styled(
+                "the world held its breath.",
+                Style::default().fg(DIM).add_modifier(Modifier::ITALIC),
+            )),
+            Line::from(""),
+            Line::from(Span::styled(
+                "Press Q to quit  |  Press R to restart",
+                Style::default().fg(HIGHLIGHT),
+            )),
+        ]
+    };
+
+    let title_color = if wagner_wins { WAGNER_COLOR } else { RUSSIA_COLOR };
+    let block = Block::default()
         .title(" GAME OVER ")
-        .borders(Borders::ALL);
+        .title_style(Style::default().fg(title_color).add_modifier(Modifier::BOLD))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(title_color));
     let p = Paragraph::new(lines).block(block).wrap(Wrap { trim: false });
     f.render_widget(p, area);
 }

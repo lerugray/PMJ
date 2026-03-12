@@ -14,16 +14,15 @@
 - [x] Stacking enforcement (one side per location)
 
 ## Phase 3: Remaining Rules
-- [ ] Police units — OMON/MOSpol cannot initiate attacks (need to block in contact menu)
+- [x] Police units — OMON/MOSpol cannot initiate attacks (filtered from contact opportunities)
 - [ ] Roadblock movement cost — Wagner pays +1 MP to enter a roadblocked location
-- [ ] Dispersal / GTT return — dispersed units return to map next turn
+- [x] Dispersal / GTT return — dispersed units return to home location next turn
 - [ ] Two-player mode (section 11.0) — Russian player replaces AI
 - [ ] Russian auto-victory in two-player (occupy Rostov + LOC to Moscow)
 
 ## Phase 4: Polish
-- [ ] Better map line drawing (Bresenham lines between nodes, not just midpoints)
+- [x] Halfblock unit symbols on map (▐R▌ ▐╳▌ etc., NATO-style, color-coded)
 - [ ] Contact UI improvements (show flanking count, let player choose individual attackers)
 - [ ] Unit detail popup / info panel
 - [ ] Help screen / rules reference overlay (F1 or ?)
 - [ ] Game over screen with narrative outcome text
-- [ ] Title screen

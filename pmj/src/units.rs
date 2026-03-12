@@ -63,6 +63,26 @@ impl UnitId {
         }
     }
 
+    /// NATO-style center symbol for halfblock counter display.
+    pub fn nato_symbol(&self) -> char {
+        match self {
+            // Wagner: use starting letter for visual distinction
+            UnitId::Rusich => 'R',
+            UnitId::Utkin => 'U',
+            UnitId::Serb => 'S',
+            // Russian military: NATO infantry symbol
+            UnitId::MechanizedRegiment => '╳',
+            UnitId::MotorizedInfantry => '╳',
+            UnitId::ArmoredRegiment => '◇',
+            UnitId::Omon => '╳',
+            UnitId::Akhmat => '╳',
+            UnitId::Fsb => '█',
+            UnitId::Helicopters => 'H',
+            UnitId::Sobr => '█',
+            UnitId::Mospol => '╳',
+        }
+    }
+
     pub fn is_wagner(&self) -> bool {
         matches!(self, UnitId::Rusich | UnitId::Utkin | UnitId::Serb)
     }
@@ -87,6 +107,7 @@ pub struct Unit {
     pub in_cup: bool,      // (C) starts in Moscow Mobilization Cup
     pub location: Option<Location>,
     pub mp_spent: i32,
+    pub dispersed: bool,
 }
 
 impl Unit {
@@ -130,6 +151,7 @@ impl Unit {
     pub fn eliminate(&mut self) {
         self.location = None;
         self.is_reduced = false;
+        self.dispersed = false;
     }
 }
 
@@ -150,6 +172,7 @@ pub fn create_all_units() -> Vec<Unit> {
             in_cup: false,
             location: Some(Location::RostovOnDon),
             mp_spent: 0,
+            dispersed: false,
         },
         Unit {
             id: UnitId::Utkin,
@@ -163,6 +186,7 @@ pub fn create_all_units() -> Vec<Unit> {
             in_cup: false,
             location: Some(Location::RostovOnDon),
             mp_spent: 0,
+            dispersed: false,
         },
         Unit {
             id: UnitId::Serb,
@@ -176,6 +200,7 @@ pub fn create_all_units() -> Vec<Unit> {
             in_cup: false,
             location: Some(Location::RostovOnDon),
             mp_spent: 0,
+            dispersed: false,
         },
         // === Russia ===
         Unit {
@@ -190,6 +215,7 @@ pub fn create_all_units() -> Vec<Unit> {
             in_cup: true,
             location: None,
             mp_spent: 0,
+            dispersed: false,
         },
         Unit {
             id: UnitId::MotorizedInfantry,
@@ -203,6 +229,7 @@ pub fn create_all_units() -> Vec<Unit> {
             in_cup: true,
             location: None,
             mp_spent: 0,
+            dispersed: false,
         },
         Unit {
             id: UnitId::ArmoredRegiment,
@@ -216,6 +243,7 @@ pub fn create_all_units() -> Vec<Unit> {
             in_cup: true,
             location: None,
             mp_spent: 0,
+            dispersed: false,
         },
         Unit {
             id: UnitId::Omon,
@@ -229,6 +257,7 @@ pub fn create_all_units() -> Vec<Unit> {
             in_cup: false,
             location: Some(Location::Moscow),
             mp_spent: 0,
+            dispersed: false,
         },
         Unit {
             id: UnitId::Akhmat,
@@ -242,6 +271,7 @@ pub fn create_all_units() -> Vec<Unit> {
             in_cup: true,
             location: None,
             mp_spent: 0,
+            dispersed: false,
         },
         Unit {
             id: UnitId::Fsb,
@@ -255,6 +285,7 @@ pub fn create_all_units() -> Vec<Unit> {
             in_cup: false,
             location: Some(Location::Moscow),
             mp_spent: 0,
+            dispersed: false,
         },
         Unit {
             id: UnitId::Helicopters,
@@ -268,6 +299,7 @@ pub fn create_all_units() -> Vec<Unit> {
             in_cup: true,
             location: None,
             mp_spent: 0,
+            dispersed: false,
         },
         Unit {
             id: UnitId::Sobr,
@@ -281,6 +313,7 @@ pub fn create_all_units() -> Vec<Unit> {
             in_cup: false,
             location: Some(Location::Moscow),
             mp_spent: 0,
+            dispersed: false,
         },
         Unit {
             id: UnitId::Mospol,
@@ -294,6 +327,7 @@ pub fn create_all_units() -> Vec<Unit> {
             in_cup: true,
             location: None,
             mp_spent: 0,
+            dispersed: false,
         },
     ]
 }
