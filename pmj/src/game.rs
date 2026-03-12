@@ -19,6 +19,8 @@ pub enum Phase {
 /// What the player is currently doing in the UI.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Screen {
+    /// Title screen shown at game start.
+    Title,
     /// Main menu for the current phase.
     PhaseMenu,
     /// Selecting which Wagner unit's MCT to adjust.
@@ -119,7 +121,7 @@ impl GameState {
             turn: 1,
             momentum: 1,
             phase: Phase::Administration,
-            screen: Screen::MctSelect,
+            screen: Screen::Title,
             cup,
             roadblocks: [None, None],
             people_are_silent_pulled: false,

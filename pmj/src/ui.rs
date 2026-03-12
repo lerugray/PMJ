@@ -337,6 +337,7 @@ fn draw_mct(f: &mut Frame, game: &GameState, area: Rect) {
 
 fn draw_content(f: &mut Frame, game: &GameState, area: Rect) {
     match &game.screen {
+        Screen::Title => draw_title(f, area),
         Screen::MctSelect => draw_mct_select_menu(f, game, area),
         Screen::MctAdjust(idx) => draw_mct_adjust_menu(f, game, area, *idx),
         Screen::PhaseMenu => draw_phase_menu(f, game, area),
@@ -402,6 +403,63 @@ fn draw_menu(f: &mut Frame, title: &str, labels: &[String], cursor: usize, area:
 }
 
 // ── Screen-specific draws ────────────────────────────────────────────────
+
+fn draw_title(f: &mut Frame, area: Rect) {
+    let title_art = vec![
+        "",
+        "  ╔═══════════════════════════════════════════════╗",
+        "  ║                                               ║",
+        "  ║    P R I G O Z H I N ' S                      ║",
+        "  ║        M A R C H   O F   J U S T I C E        ║",
+        "  ║                                               ║",
+        "  ║    A solitaire wargame by Ray Weiss           ║",
+        "  ║    Published by Conflict Simulations Ltd.     ║",
+        "  ║                                               ║",
+        "  ║    June 23, 2023 — The March on Moscow        ║",
+        "  ║                                               ║",
+        "  ╚═══════════════════════════════════════════════╝",
+        "",
+        "         Wagner forces stand in Rostov-On-Don.",
+        "      The road to Moscow lies open before them.",
+        "",
+        "          \"The people are silent.\"",
+        "                     — Pushkin, Boris Godunov",
+        "",
+        "",
+        "              Press ENTER to begin",
+        "                Press Q to quit",
+    ];
+
+    let lines: Vec<Line> = title_art
+        .iter()
+        .enumerate()
+        .map(|(i, &text)| {
+            let style = if i >= 2 && i <= 11 {
+                // Title box
+                if text.contains("P R I G") || text.contains("M A R C H") {
+                    Style::default().fg(WAGNER_COLOR).add_modifier(Modifier::BOLD)
+                } else if text.contains("Ray Weiss") || text.contains("Conflict") {
+                    Style::default().fg(Color::White)
+                } else {
+                    Style::default().fg(HIGHLIGHT)
+                }
+            } else if text.contains("Pushkin") {
+                Style::default().fg(DIM).add_modifier(Modifier::ITALIC)
+            } else if text.contains("people are silent") {
+                Style::default().fg(Color::White).add_modifier(Modifier::ITALIC)
+            } else if text.contains("Press") {
+                Style::default().fg(HIGHLIGHT)
+            } else {
+                Style::default().fg(Color::White)
+            };
+            Line::from(Span::styled(text.to_string(), style))
+        })
+        .collect();
+
+    let block = Block::default().borders(Borders::ALL).border_style(Style::default().fg(DIM));
+    let p = Paragraph::new(lines).block(block);
+    f.render_widget(p, area);
+}
 
 fn draw_mct_select_menu(f: &mut Frame, game: &GameState, area: Rect) {
     let wagner_ids = [UnitId::Rusich, UnitId::Utkin, UnitId::Serb];

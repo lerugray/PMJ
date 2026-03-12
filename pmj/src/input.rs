@@ -17,6 +17,13 @@ pub fn handle_key(game: &mut GameState, key: KeyEvent) -> bool {
     }
 
     match &game.screen.clone() {
+        Screen::Title => {
+            match key.code {
+                KeyCode::Enter => game.start_administration(),
+                KeyCode::Char('q') | KeyCode::Char('Q') => return true,
+                _ => {}
+            }
+        }
         Screen::MctSelect => handle_mct_select(game, key),
         Screen::MctAdjust(idx) => handle_mct_adjust(game, key, *idx),
         Screen::PhaseMenu => handle_phase_menu(game, key),
