@@ -60,10 +60,16 @@ fn draw_map_panel(f: &mut Frame, game: &GameState, area: Rect) {
     let inner = block.inner(area);
     f.render_widget(block, area);
 
+    // Dynamic horizontal centering: map content spans ~x=9..62, center it in the panel
+    let map_content_width: u16 = 64; // approximate width the positions were designed for
+    let x_off = inner.width.saturating_sub(map_content_width) / 2;
+
     // Draw edges as lines between locations using Bresenham's algorithm
     for (a, b, props) in game.map.all_edges() {
-        let (ax, ay) = a.map_pos();
-        let (bx, by) = b.map_pos();
+        let (ax_raw, ay) = a.map_pos();
+        let (bx_raw, by) = b.map_pos();
+        let ax = ax_raw + x_off;
+        let bx = bx_raw + x_off;
         let style = if props.m4 {
             Style::default().fg(M4_COLOR).add_modifier(Modifier::BOLD)
         } else if props.river {
@@ -158,7 +164,8 @@ fn draw_map_panel(f: &mut Frame, game: &GameState, area: Rect) {
 
     // Draw location nodes
     for loc in Location::all() {
-        let (cx, cy) = loc.map_pos();
+        let (cx_raw, cy) = loc.map_pos();
+        let cx = cx_raw + x_off;
         let loc_name_w = loc.name().len().min(14) as u16 + 2;
         if cx + loc_name_w > inner.width || cy + 4 > inner.height {
             continue;
@@ -219,12 +226,12 @@ fn draw_map_panel(f: &mut Frame, game: &GameState, area: Rect) {
                     ]
                 }
                 Location::Rublevo => {
-                    // Moscow suburbs — house glyphs like the board map triangles
+                    // Moscow suburbs — triangles like the rooftop shapes on the board map
                     vec![
                         Span::styled("│", label_style),
                         Span::styled(display_name, label_style),
                         Span::styled("│", label_style),
-                        Span::styled(" ⌂⌂⌂", Style::default().fg(Color::Rgb(180, 170, 130))),
+                        Span::styled(" ▲▲▲", Style::default().fg(Color::Rgb(180, 170, 130))),
                     ]
                 }
                 Location::GroznyAkhmatBase => {
