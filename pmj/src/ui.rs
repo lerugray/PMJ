@@ -207,10 +207,55 @@ fn draw_map_panel(f: &mut Frame, game: &GameState, area: Rect) {
             let p = Paragraph::new(Line::from(Span::styled(&top, label_style)));
             f.render_widget(p, Rect::new(inner.x + cx, inner.y + cy, name_width, 1));
 
-            // Name
-            let mid = format!("│{}│", display_name);
-            let p = Paragraph::new(Line::from(Span::styled(&mid, label_style)));
-            f.render_widget(p, Rect::new(inner.x + cx, inner.y + cy + 1, name_width, 1));
+            // Name row — add special location glyphs
+            let mid_spans = match loc {
+                Location::Moscow => {
+                    // Capital city — red circle like the board map
+                    vec![
+                        Span::styled("│", label_style),
+                        Span::styled(display_name, label_style),
+                        Span::styled("│", label_style),
+                        Span::styled(" ⬤", Style::default().fg(WAGNER_COLOR)),
+                    ]
+                }
+                Location::Rublevo => {
+                    // Moscow suburbs — house glyphs like the board map triangles
+                    vec![
+                        Span::styled("│", label_style),
+                        Span::styled(display_name, label_style),
+                        Span::styled("│", label_style),
+                        Span::styled(" ⌂⌂⌂", Style::default().fg(Color::Rgb(180, 170, 130))),
+                    ]
+                }
+                Location::GroznyAkhmatBase => {
+                    // Akhmat base — flag marker
+                    vec![
+                        Span::styled("│", label_style),
+                        Span::styled(display_name, label_style),
+                        Span::styled("│", label_style),
+                        Span::styled(" ⚑", Style::default().fg(MOMENTUM_POS)),
+                    ]
+                }
+                Location::RostovOnDon => {
+                    // Wagner HQ
+                    vec![
+                        Span::styled("│", label_style),
+                        Span::styled(display_name, label_style),
+                        Span::styled("│", label_style),
+                        Span::styled(" HQ", Style::default().fg(WAGNER_COLOR).add_modifier(Modifier::BOLD)),
+                    ]
+                }
+                _ => {
+                    vec![
+                        Span::styled("│", label_style),
+                        Span::styled(display_name, label_style),
+                        Span::styled("│", label_style),
+                    ]
+                }
+            };
+            let mid_width = mid_spans.iter().map(|s| s.width() as u16).sum::<u16>();
+            let p = Paragraph::new(Line::from(mid_spans));
+            f.render_widget(p, Rect::new(inner.x + cx, inner.y + cy + 1, mid_width.min(inner.width - cx), 1));
 
             // Bottom border
             let bot = format!("└{}┘", "─".repeat(display_name.len()));
