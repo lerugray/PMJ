@@ -1,6 +1,6 @@
 /// Input handling — maps keyboard events to game actions per screen.
 
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::game::{GameState, Phase, Screen};
 use crate::map::Location;
@@ -21,6 +21,11 @@ pub fn handle_key(game: &mut GameState, key: KeyEvent) -> bool {
                 game.screen = Screen::HelpScreen;
                 return false;
             }
+            // Ctrl+S to save from any game screen
+            KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                let _ = game.save_game();
+                return false;
+            }
             _ => {}
         }
     }
@@ -29,6 +34,11 @@ pub fn handle_key(game: &mut GameState, key: KeyEvent) -> bool {
         Screen::Title => {
             match key.code {
                 KeyCode::Enter => game.start_administration(),
+                KeyCode::Char('l') | KeyCode::Char('L') => {
+                    if GameState::save_exists() {
+                        let _ = game.load_game();
+                    }
+                }
                 KeyCode::Char('q') | KeyCode::Char('Q') => return true,
                 _ => {}
             }
@@ -176,14 +186,8 @@ fn handle_phase_menu(game: &mut GameState, key: KeyEvent) {
                     game.cursor = 0;
                 }
                 1 => {
-                    // Contact
-                    let opps = game.contact_opportunities();
-                    if opps.is_empty() {
-                        game.record("No contact opportunities available.");
-                    } else {
-                        game.screen = Screen::ContactSelectLocation;
-                        game.cursor = 0;
-                    }
+                    // Contact — auto-skip steps when only one option
+                    enter_contact_flow(game);
                 }
                 2 => {
                     // End Wagner Turn → check victory first
@@ -201,19 +205,61 @@ fn handle_phase_menu(game: &mut GameState, key: KeyEvent) {
                 _ => {}
             }
         }
-        KeyCode::Tab => {
-            // Show first Wagner unit on map in the detail panel
-            let wagner_ids = [UnitId::Rusich, UnitId::Utkin, UnitId::Serb];
-            for id in &wagner_ids {
-                if let Some(idx) = game.unit_index(*id) {
-                    if game.units[idx].is_on_map() {
-                        game.screen = Screen::UnitDetail(idx);
-                        return;
-                    }
-                }
-            }
-        }
+        KeyCode::Tab => open_unit_detail(game),
         _ => {}
+    }
+}
+
+/// Enter the contact flow, auto-skipping screens when there's only one option.
+fn enter_contact_flow(game: &mut GameState) {
+    let opps = game.contact_opportunities();
+    if opps.is_empty() {
+        game.flash_message("No contact opportunities.");
+        return;
+    }
+
+    if opps.len() == 1 {
+        let (from_loc, targets) = opps[0].clone();
+        if targets.len() == 1 {
+            // Single location, single target — skip to attacker selection
+            enter_attacker_select(game, from_loc, targets[0]);
+            return;
+        }
+        // Single location, multiple targets
+        game.screen = Screen::ContactSelectTarget { from_loc };
+        game.cursor = 0;
+        return;
+    }
+
+    // Multiple locations
+    game.screen = Screen::ContactSelectLocation;
+    game.cursor = 0;
+}
+
+/// Enter attacker selection, auto-skipping if only one eligible attacker.
+fn enter_attacker_select(game: &mut GameState, from_loc: Location, target_loc: Location) {
+    let available: Vec<usize> = game.wagner_units_at(from_loc)
+        .into_iter()
+        .filter(|&i| !game.units[i].police)
+        .collect();
+
+    if available.len() == 1 {
+        // Only one attacker — skip straight to confirm
+        game.screen = Screen::ContactConfirm {
+            from_loc,
+            target_loc,
+            attacker_indices: available,
+        };
+        game.cursor = 0;
+    } else {
+        let selected = vec![true; available.len()];
+        game.screen = Screen::ContactSelectAttackers {
+            from_loc,
+            target_loc,
+            available,
+            selected,
+        };
+        game.cursor = 0;
     }
 }
 
@@ -259,10 +305,29 @@ fn handle_unit_detail(game: &mut GameState, key: KeyEvent, current_idx: usize) {
             }
         }
         KeyCode::Esc | KeyCode::Enter => {
-            game.screen = Screen::PhaseMenu;
-            game.cursor = 0;
+            // Return to where we came from
+            if let Some(prev) = game.prev_screen.take() {
+                game.screen = *prev;
+            } else {
+                game.screen = Screen::PhaseMenu;
+                game.cursor = 0;
+            }
         }
         _ => {}
+    }
+}
+
+/// Open unit detail panel from any screen, saving current screen for return.
+fn open_unit_detail(game: &mut GameState) {
+    let wagner_ids = [UnitId::Rusich, UnitId::Utkin, UnitId::Serb];
+    for id in &wagner_ids {
+        if let Some(idx) = game.unit_index(*id) {
+            if game.units[idx].is_on_map() {
+                game.prev_screen = Some(Box::new(game.screen.clone()));
+                game.screen = Screen::UnitDetail(idx);
+                return;
+            }
+        }
     }
 }
 
@@ -325,6 +390,7 @@ fn handle_move_select_unit(game: &mut GameState, key: KeyEvent) {
             game.screen = Screen::PhaseMenu;
             game.cursor = 0;
         }
+        KeyCode::Tab => open_unit_detail(game),
         _ => {}
     }
 }
@@ -344,8 +410,8 @@ fn handle_move_select_dest(game: &mut GameState, key: KeyEvent, unit_idx: usize)
         KeyCode::Down | KeyCode::Char('j') => cursor_down(game, count),
         KeyCode::Enter => {
             if game.cursor >= neighbors.len() {
-                // Back
-                game.screen = Screen::MoveSelectUnit;
+                // Back → straight to phase menu (already picked this unit)
+                game.screen = Screen::PhaseMenu;
                 game.cursor = 0;
             } else {
                 let dest = neighbors[game.cursor];
@@ -365,9 +431,11 @@ fn handle_move_select_dest(game: &mut GameState, key: KeyEvent, unit_idx: usize)
             }
         }
         KeyCode::Esc => {
-            game.screen = Screen::MoveSelectUnit;
+            // Esc from destination picker goes directly to phase menu
+            game.screen = Screen::PhaseMenu;
             game.cursor = 0;
         }
+        KeyCode::Tab => open_unit_detail(game),
         _ => {}
     }
 }
@@ -386,9 +454,14 @@ fn handle_contact_select_loc(game: &mut GameState, key: KeyEvent) {
                 game.screen = Screen::PhaseMenu;
                 game.cursor = 1;
             } else {
-                let (from_loc, _) = opportunities[game.cursor].clone();
-                game.screen = Screen::ContactSelectTarget { from_loc };
-                game.cursor = 0;
+                let (from_loc, targets) = opportunities[game.cursor].clone();
+                if targets.len() == 1 {
+                    // Auto-skip target selection
+                    enter_attacker_select(game, from_loc, targets[0]);
+                } else {
+                    game.screen = Screen::ContactSelectTarget { from_loc };
+                    game.cursor = 0;
+                }
             }
         }
         KeyCode::Esc => {
@@ -417,18 +490,7 @@ fn handle_contact_select_target(game: &mut GameState, key: KeyEvent, from_loc: L
                 game.cursor = 0;
             } else {
                 let target_loc = targets[game.cursor];
-                let available: Vec<usize> = game.wagner_units_at(from_loc)
-                    .into_iter()
-                    .filter(|&i| !game.units[i].police)
-                    .collect();
-                let selected = vec![true; available.len()];
-                game.screen = Screen::ContactSelectAttackers {
-                    from_loc,
-                    target_loc,
-                    available,
-                    selected,
-                };
-                game.cursor = 0;
+                enter_attacker_select(game, from_loc, target_loc);
             }
         }
         KeyCode::Esc => {
@@ -534,25 +596,31 @@ fn handle_contact_result(
     target_loc: Location,
     attacker_indices: Vec<usize>,
 ) {
-    if matches!(key.code, KeyCode::Enter) {
-        // Check if target is now empty for advance
-        if game.target_empty_of_russians(target_loc) {
-            // Check if any attackers are still on the map
-            let alive: Vec<usize> = attacker_indices
-                .iter()
-                .copied()
-                .filter(|&i| game.units[i].is_on_map())
-                .collect();
-            if !alive.is_empty() {
-                game.screen = Screen::AdvanceAfterContact {
-                    target_loc,
-                    attacker_indices: alive,
-                };
-                return;
+    match key.code {
+        KeyCode::Enter => {
+            // Check if target is now empty for advance
+            if game.target_empty_of_russians(target_loc) {
+                let alive: Vec<usize> = attacker_indices
+                    .iter()
+                    .copied()
+                    .filter(|&i| game.units[i].is_on_map())
+                    .collect();
+                if !alive.is_empty() {
+                    game.screen = Screen::AdvanceAfterContact {
+                        target_loc,
+                        attacker_indices: alive,
+                    };
+                    return;
+                }
             }
+            // After contact, check if more attacks are available
+            return_or_attack_again(game);
         }
-        game.screen = Screen::PhaseMenu;
-        game.cursor = 0;
+        KeyCode::Esc => {
+            game.screen = Screen::PhaseMenu;
+            game.cursor = 0;
+        }
+        _ => {}
     }
 }
 
@@ -565,14 +633,24 @@ fn handle_advance(
     match key.code {
         KeyCode::Char('y') | KeyCode::Char('Y') => {
             game.advance_units(&attacker_indices, target_loc);
-            game.screen = Screen::PhaseMenu;
-            game.cursor = 0;
+            return_or_attack_again(game);
         }
         KeyCode::Char('n') | KeyCode::Char('N') => {
-            game.screen = Screen::PhaseMenu;
-            game.cursor = 0;
+            return_or_attack_again(game);
         }
         _ => {}
+    }
+}
+
+/// After contact resolves, check for more attack opportunities.
+/// If there are more, jump straight into the contact flow; otherwise back to menu.
+fn return_or_attack_again(game: &mut GameState) {
+    let opps = game.contact_opportunities();
+    if !opps.is_empty() {
+        enter_contact_flow(game);
+    } else {
+        game.screen = Screen::PhaseMenu;
+        game.cursor = 0;
     }
 }
 

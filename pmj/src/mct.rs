@@ -41,7 +41,7 @@ pub const MCT_MIN: usize = 0;
 pub const MCT_MAX: usize = 4;
 
 /// Tracks the MCT position for one Wagner unit.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MctMarker {
     pub step: usize,
 }

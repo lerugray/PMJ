@@ -1,15 +1,16 @@
 /// Units module — all game counters from the PMJ Counter Manifest.
 
+use serde::{Serialize, Deserialize};
 use crate::map::Location;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Side {
     Wagner,
     Russia,
 }
 
 /// Unique identifier for each unit type in the game.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum UnitId {
     // Wagner
     Rusich,
@@ -94,7 +95,7 @@ impl UnitId {
 }
 
 /// A single game counter.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Unit {
     pub id: UnitId,
     pub side: Side,

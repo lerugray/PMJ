@@ -1,6 +1,7 @@
 /// Game state module — holds everything that changes during play.
 
 use rand::seq::SliceRandom;
+use serde::{Serialize, Deserialize};
 
 use crate::combat::{self, ContactOutcome, CrtResult};
 use crate::map::{GameMap, Location};
@@ -8,7 +9,7 @@ use crate::mct::MctMarker;
 use crate::units::{self, Side, Unit, UnitId};
 
 /// Which phase of the turn we're in.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Phase {
     Administration,  // Set MCT for each Wagner unit
     WagnerTurn,      // Move and initiate Contact
@@ -76,7 +77,7 @@ pub enum Screen {
 }
 
 /// Items that can be in the Moscow Mobilization Cup.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CupItem {
     Unit(UnitId),
     PeopleAreSilent,
@@ -107,6 +108,8 @@ pub struct GameState {
     pub admin_units_adjusted: [bool; 3], // Track which Wagner units had MCT adjusted
     pub frame_count: u64, // Animation frame counter (incremented every tick)
     pub prev_screen: Option<Box<Screen>>, // For returning from help/overlays
+    pub status_message: Option<String>,   // Transient message (e.g. "Game saved!")
+    pub status_timer: u16,                // Frames remaining to show status
 }
 
 const WAGNER_IDS: [UnitId; 3] = [UnitId::Rusich, UnitId::Utkin, UnitId::Serb];
@@ -149,6 +152,8 @@ impl GameState {
             admin_units_adjusted: [false; 3],
             frame_count: 0,
             prev_screen: None,
+            status_message: None,
+            status_timer: 0,
         }
     }
 
@@ -1353,4 +1358,115 @@ impl GameState {
         let rlocs = self.russian_locations();
         self.map.can_trace_loc(&wlocs, &rlocs)
     }
+
+    /// Show a transient status message for ~2 seconds.
+    pub fn flash_message(&mut self, msg: impl Into<String>) {
+        self.status_message = Some(msg.into());
+        self.status_timer = 20; // ~2 seconds at 100ms poll
+    }
+
+    /// Tick down the status timer (call each frame).
+    pub fn tick_status(&mut self) {
+        if self.status_timer > 0 {
+            self.status_timer -= 1;
+            if self.status_timer == 0 {
+                self.status_message = None;
+            }
+        }
+    }
+
+    // ── Save / Load ─────────────────────────────────────────────────────
+
+    /// Save game state to pmj_save.json.
+    pub fn save_game(&mut self) -> Result<(), String> {
+        let data = SaveData {
+            units: self.units.clone(),
+            mct: self.mct.clone(),
+            turn: self.turn,
+            momentum: self.momentum,
+            phase: self.phase,
+            cup: self.cup.clone(),
+            roadblocks: self.roadblocks,
+            people_are_silent_pulled: self.people_are_silent_pulled,
+            log: self.log.clone(),
+            russian_reduced_this_turn: self.russian_reduced_this_turn,
+            russian_eliminated_this_turn: self.russian_eliminated_this_turn,
+            wagner_repulsed_this_turn: self.wagner_repulsed_this_turn,
+            wagner_reduced_this_turn: self.wagner_reduced_this_turn,
+            wagner_eliminated_this_turn: self.wagner_eliminated_this_turn,
+            admin_units_adjusted: self.admin_units_adjusted,
+        };
+        let json = serde_json::to_string_pretty(&data)
+            .map_err(|e| format!("Serialize error: {}", e))?;
+        std::fs::write("pmj_save.json", json)
+            .map_err(|e| format!("File write error: {}", e))?;
+        self.record("Game saved.");
+        self.flash_message("Game saved!");
+        Ok(())
+    }
+
+    /// Load game state from pmj_save.json.
+    pub fn load_game(&mut self) -> Result<(), String> {
+        let json = std::fs::read_to_string("pmj_save.json")
+            .map_err(|e| format!("File read error: {}", e))?;
+        let data: SaveData = serde_json::from_str(&json)
+            .map_err(|e| format!("Deserialize error: {}", e))?;
+
+        self.units = data.units;
+        self.mct = data.mct;
+        self.turn = data.turn;
+        self.momentum = data.momentum;
+        self.phase = data.phase;
+        self.cup = data.cup;
+        self.roadblocks = data.roadblocks;
+        self.people_are_silent_pulled = data.people_are_silent_pulled;
+        self.log = data.log;
+        self.russian_reduced_this_turn = data.russian_reduced_this_turn;
+        self.russian_eliminated_this_turn = data.russian_eliminated_this_turn;
+        self.wagner_repulsed_this_turn = data.wagner_repulsed_this_turn;
+        self.wagner_reduced_this_turn = data.wagner_reduced_this_turn;
+        self.wagner_eliminated_this_turn = data.wagner_eliminated_this_turn;
+        self.admin_units_adjusted = data.admin_units_adjusted;
+        self.map = GameMap::new();
+        self.cursor = 0;
+        self.log_scroll = 0;
+        self.prev_screen = None;
+
+        // Set screen based on phase
+        self.screen = match self.phase {
+            Phase::Administration => Screen::MctSelect,
+            Phase::WagnerTurn => Screen::PhaseMenu,
+            Phase::RussianAI => Screen::RussianPhaseDisplay,
+            Phase::EndTurn => Screen::EndTurnConfirm,
+        };
+
+        self.record("Game loaded from save.");
+        self.flash_message("Game loaded!");
+        Ok(())
+    }
+
+    /// Check if a save file exists.
+    pub fn save_exists() -> bool {
+        std::path::Path::new("pmj_save.json").exists()
+    }
+}
+
+/// Serializable snapshot of game state (excludes UI-only fields).
+#[derive(Serialize, Deserialize)]
+struct SaveData {
+    units: Vec<Unit>,
+    mct: [MctMarker; 3],
+    turn: i32,
+    momentum: i32,
+    phase: Phase,
+    cup: Vec<CupItem>,
+    roadblocks: [Option<Location>; 2],
+    people_are_silent_pulled: bool,
+    log: Vec<String>,
+    russian_reduced_this_turn: bool,
+    russian_eliminated_this_turn: bool,
+    wagner_repulsed_this_turn: bool,
+    wagner_reduced_this_turn: bool,
+    wagner_eliminated_this_turn: bool,
+    admin_units_adjusted: [bool; 3],
 }

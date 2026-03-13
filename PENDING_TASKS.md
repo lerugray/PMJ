@@ -18,7 +18,7 @@
 - [x] Roadblock movement cost — Wagner pays +1 MP to enter a roadblocked location
 - [x] Dispersal / GTT return — dispersed units return to home location next turn
 
-## Phase 4: Polish — IN PROGRESS
+## Phase 4: Polish — COMPLETE
 - [x] Halfblock unit symbols on map (▐R▌ ▐╳▌ etc., NATO-style, color-coded)
 - [x] Contact UI improvements (attacker toggle, flanking count display)
 - [x] Help screen / rules reference overlay (? key)
@@ -39,17 +39,15 @@
 - [x] Bresenham line centering + bounding box skip
 - [x] Roster expanded to show all units
 
-## Phase 5: UX Flow Improvements — TODO
-- [ ] Auto-skip contact screens when only one option (1 location, 1 target)
-- [ ] Tab unit detail available from more screens (not just phase menu)
-- [ ] After contact, option to attack again instead of returning to phase menu
-- [ ] Movement Esc goes to PhaseMenu directly (already moved, no need to re-select)
+## Phase 5: UX Flow Improvements — COMPLETE
+- [x] Auto-skip contact screens when only one option (1 location, 1 target, 1 attacker)
+- [x] Tab unit detail available from more screens (move select, destination picker)
+- [x] After contact, auto-attack-again if more opportunities (Enter = next attack, Esc = menu)
+- [x] Movement Esc goes to PhaseMenu directly (already moved, no need to re-select)
+- [x] Unit detail returns to correct screen (not always PhaseMenu)
+- [x] Status flash messages for feedback (save, no contact, etc.)
+
+## Phase 6: Features — IN PROGRESS
+- [x] Save/load game state (Ctrl+S save, L on title to load, single slot)
 - [ ] Map position fine-tuning after playtesting
-
-## Phase 6: Features — TODO
-- [ ] Save/load game state
 - [ ] Sound or flash on combat results (if terminal supports it)
-
-## Uncommitted changes (need to commit + push)
-- map.rs: Grozny name shortened
-- ui.rs: M4 display, roadblock, Bresenham fixes, roster, GUIDE color, legend

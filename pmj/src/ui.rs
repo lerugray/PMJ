@@ -322,7 +322,7 @@ fn draw_header(f: &mut Frame, game: &GameState, area: Rect) {
         Phase::RussianAI => "RUSSIAN AI PHASE",
         Phase::EndTurn => "END TURN PHASE",
     };
-    let text = Line::from(vec![
+    let mut spans = vec![
         Span::styled(
             format!(" Turn {}/6 ", game.turn),
             Style::default()
@@ -338,7 +338,21 @@ fn draw_header(f: &mut Frame, game: &GameState, area: Rect) {
                 .bg(HIGHLIGHT)
                 .add_modifier(Modifier::BOLD),
         ),
-    ]);
+    ];
+
+    // Flash status message (e.g. "Game saved!")
+    if let Some(msg) = &game.status_message {
+        spans.push(Span::raw("  "));
+        spans.push(Span::styled(
+            format!(" {} ", msg),
+            Style::default()
+                .fg(Color::Black)
+                .bg(MOMENTUM_POS)
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
+
+    let text = Line::from(spans);
     let block = Block::default().borders(Borders::BOTTOM);
     let p = Paragraph::new(text).block(block);
     f.render_widget(p, area);
@@ -898,11 +912,18 @@ fn draw_title(f: &mut Frame, area: Rect, frame_count: u64) {
         let quit_color = dim_rgb(140, 140, 140, menu_fade);
 
         let enter_text = "Press ENTER to begin";
+        let load_text = if crate::game::GameState::save_exists() {
+            "Press L to load saved game"
+        } else {
+            ""
+        };
         let quit_text = "Press Q to quit";
         for (text, color, dy) in [
             (enter_text, enter_color, 0u16),
-            (quit_text, quit_color, 1),
+            (load_text, dim_rgb(100, 200, 100, menu_fade), 1),
+            (quit_text, quit_color, 2),
         ] {
+            if text.is_empty() { continue; }
             let y = menu_y + dy;
             if y >= area.bottom() { continue; }
             let x_start = center_x(&area, text);
@@ -1040,7 +1061,7 @@ fn draw_phase_menu(f: &mut Frame, game: &GameState, area: Rect) {
 
     items.push(ListItem::new(Line::from("")));
     items.push(ListItem::new(Line::from(Span::styled(
-        "  ? Help   Tab Unit Info   Q Quit",
+        "  ? Help   Tab Unit Info   Ctrl+S Save   Q Quit",
         Style::default().fg(GUIDE),
     ))));
     let list = List::new(items).block(block);
@@ -1388,7 +1409,7 @@ fn draw_contact_confirm(
 
 fn draw_contact_result(
     f: &mut Frame,
-    _game: &GameState,
+    game: &GameState,
     area: Rect,
     outcome: &crate::combat::ContactOutcome,
     _target_loc: Location,
@@ -1440,10 +1461,18 @@ fn draw_contact_result(
         Style::default().fg(result_color),
     )));
     lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
-        "Enter → Continue",
-        Style::default().fg(HIGHLIGHT),
-    )));
+    let has_more = !game.contact_opportunities().is_empty();
+    if has_more {
+        lines.push(Line::from(Span::styled(
+            "Enter → Attack again    Esc → Phase menu",
+            Style::default().fg(HIGHLIGHT),
+        )));
+    } else {
+        lines.push(Line::from(Span::styled(
+            "Enter → Continue",
+            Style::default().fg(HIGHLIGHT),
+        )));
+    }
 
     let block = Block::default()
         .title(" CONTACT RESOLVED ")

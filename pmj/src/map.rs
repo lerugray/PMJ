@@ -2,9 +2,10 @@
 /// Transcribed directly from the PMJ rulebook adjacency list and map.
 
 use std::collections::HashMap;
+use serde::{Serialize, Deserialize};
 
 /// Every location on the game map.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Location {
     RostovOnDon,
     GroznyAkhmatBase,
