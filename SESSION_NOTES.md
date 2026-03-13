@@ -13,15 +13,17 @@ UX flow improvements for smoother playtesting, save/load system, and map layout 
 5. **Save/Load system** — Ctrl+S saves from any game screen, L loads from title screen. Single save file (pmj_save.json). Status flash in header.
 6. **Status flash messages** — transient green badge in header bar for save confirmation, etc.
 7. **Map M4 visibility fix** — spread M4 locations to 7-row gaps, tightened Bresenham skip zones so cyan dots are visible between all locations
-8. **Dynamic map centering** — map content auto-centers horizontally in the panel regardless of terminal width
+8. **Dynamic map centering** — computes actual content bounds and centers map in panel, works at any terminal width
 9. **Location indicators** — Rublevo ⌂⌂⌂ (suburbs), Moscow ⬤ (capital), Rostov HQ (Wagner base), Grozny ⚑ (Akhmat base)
 10. **Right panel centering** — header, momentum bar, and map legend centered in their panels
 11. **Bugaevka name** — shortened to "Bugaevka B.P."
+12. **Minimum terminal size check** — shows friendly "resize terminal" message (need 100x40) instead of broken rendering on small terminals
 
 ### What needs doing next (Session 5)
 1. **Playtesting** — run through a full game to verify all the flow improvements feel right
-2. **Map fine-tuning** — verify positions/indicators look right after layout changes
+2. **Map fine-tuning** — verify centering looks correct after the math fix (close running game, cargo run to rebuild)
 3. **Sound/flash on combat results** — if terminal supports
+4. **Note:** the exe may need to be closed before rebuilding — cargo can't overwrite a running process
 
 ### Git status
-All committed and pushed.
+All committed and pushed as af3f92b.

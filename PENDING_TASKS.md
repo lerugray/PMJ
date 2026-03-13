@@ -50,10 +50,12 @@
 ## Phase 6: Features & Map Polish — COMPLETE
 - [x] Save/load game state (Ctrl+S save, L on title to load, single slot)
 - [x] M4 road visibility fix (spread positions, tighten skip zones)
-- [x] Map centered in panel (shifted right ~4 columns)
+- [x] Dynamic map centering (computes actual content bounds, works at any terminal width)
 - [x] Location indicators (Rublevo ⌂⌂⌂ suburbs, Moscow ⬤ capital, Rostov HQ, Grozny ⚑ base)
 - [x] Bugaevka name shortened to "Bugaevka B.P."
+- [x] Right panel centering (header, momentum, legend)
+- [x] Minimum terminal size check (100x40, friendly resize message)
 
 ## Phase 7: Remaining — TODO
-- [ ] Map fine-tuning after playtesting
+- [ ] Playtest a full game to verify flow and map rendering
 - [ ] Sound or flash on combat results (if terminal supports it)
