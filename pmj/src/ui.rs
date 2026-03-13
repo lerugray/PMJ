@@ -159,17 +159,31 @@ fn draw_map_panel(f: &mut Frame, game: &GameState, area: Rect) {
             }
         }
 
-        // Add river marker '~' at midpoint for river crossings (extra visual cue)
+        // Draw river alongside edge — offset by 1 column so it's visible next to the road
         if props.river {
-            let mx = ((ax as i32 + a_hw + bx as i32 + b_hw) / 2) as u16;
-            let my = ((ay + by) / 2) as u16;
-            if mx < inner.width && my < inner.height {
-                let span = Span::styled(
-                    "≋",
-                    Style::default().fg(RIVER_COLOR).add_modifier(Modifier::BOLD),
-                );
-                let p = Paragraph::new(Line::from(span));
-                f.render_widget(p, Rect::new(inner.x + mx, inner.y + my, 1, 1));
+            let river_style = Style::default().fg(RIVER_COLOR).add_modifier(Modifier::BOLD);
+            for (px, py) in &points {
+                let rx = (*px + 1) as u16; // offset 1 col to the right
+                let y = *py as u16;
+                // Skip points inside either label box
+                let a_w = (a_name.len().min(14) as i32) + 2;
+                let in_a = (rx as i32) >= ax as i32
+                    && (rx as i32) <= ax as i32 + a_w
+                    && (y as i32) >= ay as i32
+                    && (y as i32) <= ay as i32 + 3;
+                let b_w = (b_name.len().min(14) as i32) + 2;
+                let in_b = (rx as i32) >= bx as i32
+                    && (rx as i32) <= bx as i32 + b_w
+                    && (y as i32) >= by as i32
+                    && (y as i32) <= by as i32 + 3;
+                if in_a || in_b {
+                    continue;
+                }
+                if rx < inner.width && y < inner.height {
+                    let span = Span::styled("≈", river_style);
+                    let p = Paragraph::new(Line::from(span));
+                    f.render_widget(p, Rect::new(inner.x + rx, inner.y + y, 1, 1));
+                }
             }
         }
     }
@@ -179,18 +193,12 @@ fn draw_map_panel(f: &mut Frame, game: &GameState, area: Rect) {
         if let Screen::MoveSelectDest(unit_idx) = &game.screen {
             let unit = &game.units[*unit_idx];
             if let Some(from) = unit.location {
-                let neighbors: Vec<(Location, bool)> = game
-                    .map
-                    .neighbors(from)
+                let reachable = game.reachable_locations(*unit_idx);
+                let destinations: Vec<(Location, bool)> = reachable
                     .iter()
-                    .map(|(n, _)| {
-                        let cost = game.move_cost(*unit_idx, from, *n);
-                        let mp_rem = game.mp_remaining(*unit_idx);
-                        let can_afford = cost.map(|c| c <= mp_rem).unwrap_or(false);
-                        (*n, can_afford)
-                    })
+                    .map(|(loc, _cost)| (*loc, true))
                     .collect();
-                Some((from, neighbors))
+                Some((from, destinations))
             } else {
                 None
             }
@@ -366,7 +374,7 @@ fn draw_map_panel(f: &mut Frame, game: &GameState, area: Rect) {
         let legend = Line::from(vec![
             Span::styled(" ●", Style::default().fg(M4_COLOR).add_modifier(Modifier::BOLD)),
             Span::styled(" M4 (victory route) ", Style::default().fg(GUIDE)),
-            Span::styled(" ~", Style::default().fg(RIVER_COLOR)),
+            Span::styled(" ≈", Style::default().fg(RIVER_COLOR).add_modifier(Modifier::BOLD)),
             Span::styled(" River (+1 MP) ", Style::default().fg(GUIDE)),
             Span::styled(" ·", Style::default().fg(ROAD_COLOR)),
             Span::styled(" Road ", Style::default().fg(GUIDE)),
@@ -1233,30 +1241,12 @@ fn draw_move_unit_menu(f: &mut Frame, game: &GameState, area: Rect) {
 
 fn draw_move_dest_menu(f: &mut Frame, game: &GameState, area: Rect, unit_idx: usize) {
     let unit = &game.units[unit_idx];
-    let from = unit.location.unwrap();
-    let neighbors = game.map.neighbors(from);
+    let reachable = game.reachable_locations(unit_idx);
 
     let mut labels: Vec<String> = Vec::new();
-    for &(neighbor, props) in neighbors {
-        let cost = game.move_cost(unit_idx, from, neighbor);
-        let mp_rem = game.mp_remaining(unit_idx);
-        let mut tags = Vec::new();
-        if props.river {
-            tags.push("river +1");
-        }
-        if props.m4 {
-            tags.push("M4");
-        }
-        let tag_str = if tags.is_empty() {
-            String::new()
-        } else {
-            format!(" [{}]", tags.join(", "))
-        };
-        let can = cost.map(|c| c <= mp_rem).unwrap_or(false);
-        let status = if !can { " ✗" } else { "" };
+    for &(loc, cost) in &reachable {
         labels.push(format!(
-            "{} (cost: {} MP){}{}", neighbor.name(),
-            cost.unwrap_or(0), tag_str, status
+            "{} ({} MP)", loc.name(), cost
         ));
     }
     labels.push("Back".into());
@@ -1273,7 +1263,7 @@ fn draw_move_dest_menu(f: &mut Frame, game: &GameState, area: Rect, unit_idx: us
 
     items.push(ListItem::new(Line::from("")));
     items.push(ListItem::new(Line::from(Span::styled(
-        "  ✗ = not enough MP   Esc/Back = done moving",
+        "  Esc/Back = done moving",
         Style::default().fg(GUIDE),
     ))));
 

@@ -56,6 +56,10 @@
 - [x] Right panel centering (header, momentum, legend)
 - [x] Minimum terminal size check (100x40, friendly resize message)
 
-## Phase 7: Remaining — TODO
+## Phase 7: Movement & Map Visuals — COMPLETE
+- [x] Multi-hop movement — destination picker shows all reachable locations within MP (Dijkstra pathfinding)
+- [x] River edge drawing — ≈ chars along full edge length, not just midpoint marker
+
+## Phase 8: Remaining — TODO
 - [ ] Playtest a full game to verify flow and map rendering
 - [ ] Sound or flash on combat results (if terminal supports it)

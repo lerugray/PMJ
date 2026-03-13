@@ -273,6 +273,61 @@ impl GameState {
 
     // ── Movement ─────────────────────────────────────────────────────────
 
+    /// Find all locations reachable by a unit within its remaining MP.
+    /// Returns Vec of (location, total_mp_cost) sorted by cost, excluding current location.
+    /// Accounts for rivers, roadblocks, and enemy-occupied locations (which block movement).
+    pub fn reachable_locations(&self, idx: usize) -> Vec<(Location, i32)> {
+        use std::collections::BinaryHeap;
+        use std::cmp::Reverse;
+
+        let unit = &self.units[idx];
+        let from = match unit.location {
+            Some(loc) => loc,
+            None => return Vec::new(),
+        };
+        let mp = self.mp_remaining(idx);
+        let enemy_side = if unit.is_wagner() { Side::Russia } else { Side::Wagner };
+
+        // Dijkstra: find cheapest path to every reachable location
+        let mut best_cost: std::collections::HashMap<Location, i32> = std::collections::HashMap::new();
+        let mut heap: BinaryHeap<Reverse<(i32, Location)>> = BinaryHeap::new();
+
+        best_cost.insert(from, 0);
+        heap.push(Reverse((0, from)));
+
+        while let Some(Reverse((cost, loc))) = heap.pop() {
+            if cost > *best_cost.get(&loc).unwrap_or(&i32::MAX) {
+                continue;
+            }
+            for &(neighbor, _edge) in self.map.neighbors(loc) {
+                // Can't move through enemy-occupied locations
+                let enemy_there = self.units_at(neighbor).iter().any(|&i| self.units[i].side == enemy_side);
+                if enemy_there {
+                    continue;
+                }
+                let step_cost = match self.move_cost(idx, loc, neighbor) {
+                    Some(c) => c,
+                    None => continue,
+                };
+                let total = cost + step_cost;
+                if total > mp {
+                    continue;
+                }
+                if total < *best_cost.get(&neighbor).unwrap_or(&i32::MAX) {
+                    best_cost.insert(neighbor, total);
+                    heap.push(Reverse((total, neighbor)));
+                }
+            }
+        }
+
+        let mut result: Vec<(Location, i32)> = best_cost
+            .into_iter()
+            .filter(|(loc, _)| *loc != from)
+            .collect();
+        result.sort_by_key(|(_, cost)| *cost);
+        result
+    }
+
     pub fn move_cost(&self, idx: usize, from: Location, to: Location) -> Option<i32> {
         let edge = self.map.edge(from, to)?;
         let mut cost = 1;
@@ -288,6 +343,7 @@ impl GameState {
         Some(cost)
     }
 
+    #[allow(dead_code)]
     pub fn can_move(&self, idx: usize, to: Location) -> Result<i32, String> {
         let unit = &self.units[idx];
         let from = unit.location.ok_or("Unit is off the map.")?;
@@ -319,6 +375,7 @@ impl GameState {
         Ok(cost)
     }
 
+    #[allow(dead_code)]
     pub fn move_unit(&mut self, idx: usize, to: Location) -> bool {
         let cost = match self.can_move(idx, to) {
             Ok(c) => c,
@@ -350,6 +407,34 @@ impl GameState {
             to.name(),
             cost,
             river_note,
+            remaining
+        ));
+        true
+    }
+
+    /// Move a unit to a distant location, spending the given total MP cost.
+    /// Used for multi-hop movement where the player picks a reachable destination directly.
+    pub fn move_unit_to(&mut self, idx: usize, to: Location, total_cost: i32) -> bool {
+        let from = match self.units[idx].location {
+            Some(loc) => loc,
+            None => return false,
+        };
+        let mp = self.mp_remaining(idx);
+        if total_cost > mp {
+            self.record("Not enough MP.".to_string());
+            return false;
+        }
+        let name = self.units[idx].id.name().to_string();
+        self.units[idx].location = Some(to);
+        self.units[idx].mp_spent += total_cost;
+        let remaining = self.mp_remaining(idx);
+
+        self.record(format!(
+            "{} moved {} → {} (cost {} MP, {} remaining)",
+            name,
+            from.name(),
+            to.name(),
+            total_cost,
             remaining
         ));
         true

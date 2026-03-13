@@ -396,38 +396,28 @@ fn handle_move_select_unit(game: &mut GameState, key: KeyEvent) {
 }
 
 fn handle_move_select_dest(game: &mut GameState, key: KeyEvent, unit_idx: usize) {
-    let from = game.units[unit_idx].location.unwrap();
-    let neighbors: Vec<Location> = game
-        .map
-        .neighbors(from)
-        .iter()
-        .map(|(n, _)| *n)
-        .collect();
-    let count = neighbors.len() + 1; // +1 for Back
+    let reachable = game.reachable_locations(unit_idx);
+    let count = reachable.len() + 1; // +1 for Back
 
     match key.code {
         KeyCode::Up | KeyCode::Char('k') => cursor_up(game, count),
         KeyCode::Down | KeyCode::Char('j') => cursor_down(game, count),
         KeyCode::Enter => {
-            if game.cursor >= neighbors.len() {
-                // Back → straight to phase menu (already picked this unit)
+            if game.cursor >= reachable.len() {
+                // Back → straight to phase menu
                 game.screen = Screen::PhaseMenu;
                 game.cursor = 0;
             } else {
-                let dest = neighbors[game.cursor];
-                // Only attempt move if valid (enough MP, no enemy)
-                if game.can_move(unit_idx, dest).is_ok() {
-                    game.move_unit(unit_idx, dest);
-                    // If unit still has MP, stay in move mode at new location
-                    if game.mp_remaining(unit_idx) > 0 {
-                        game.screen = Screen::MoveSelectDest(unit_idx);
-                        game.cursor = 0;
-                    } else {
-                        game.screen = Screen::PhaseMenu;
-                        game.cursor = 0;
-                    }
+                let (dest, cost) = reachable[game.cursor];
+                game.move_unit_to(unit_idx, dest, cost);
+                // If unit still has MP, stay in move mode at new location
+                if game.mp_remaining(unit_idx) > 0 {
+                    game.screen = Screen::MoveSelectDest(unit_idx);
+                    game.cursor = 0;
+                } else {
+                    game.screen = Screen::PhaseMenu;
+                    game.cursor = 0;
                 }
-                // Invalid moves are silently ignored (menu shows ✗ marker)
             }
         }
         KeyCode::Esc => {
