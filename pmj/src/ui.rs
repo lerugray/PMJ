@@ -1,7 +1,7 @@
 /// UI module — all ratatui rendering for the game.
 
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
@@ -160,7 +160,7 @@ fn draw_map_panel(f: &mut Frame, game: &GameState, area: Rect) {
     for loc in Location::all() {
         let (cx, cy) = loc.map_pos();
         let loc_name_w = loc.name().len().min(14) as u16 + 2;
-        if cx + loc_name_w >= inner.width || cy + 4 >= inner.height {
+        if cx + loc_name_w > inner.width || cy + 4 > inner.height {
             continue;
         }
 
@@ -332,7 +332,7 @@ fn draw_map_panel(f: &mut Frame, game: &GameState, area: Rect) {
         ]);
         let legend_y = inner.y + inner.height - 1;
         f.render_widget(
-            Paragraph::new(legend),
+            Paragraph::new(legend).alignment(Alignment::Center),
             Rect::new(inner.x, legend_y, inner.width, 1),
         );
     }
@@ -400,7 +400,7 @@ fn draw_header(f: &mut Frame, game: &GameState, area: Rect) {
 
     let text = Line::from(spans);
     let block = Block::default().borders(Borders::BOTTOM);
-    let p = Paragraph::new(text).block(block);
+    let p = Paragraph::new(text).block(block).alignment(Alignment::Center);
     f.render_widget(p, area);
 }
 
@@ -436,7 +436,7 @@ fn draw_momentum(f: &mut Frame, game: &GameState, area: Rect) {
         spans.push(Span::styled(label, style));
     }
 
-    let p = Paragraph::new(Line::from(spans));
+    let p = Paragraph::new(Line::from(spans)).alignment(Alignment::Center);
     f.render_widget(p, area);
 }
 

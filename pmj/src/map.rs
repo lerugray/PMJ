@@ -99,20 +99,20 @@ impl Location {
     /// ensuring Bresenham road lines are visible between label boxes.
     pub fn map_pos(&self) -> (u16, u16) {
         match self {
-            // (col, row) — origin top-left, shifted right to center in panel
+            // (col, row) — origin top-left, centered in ~64-wide map panel
             // M4 route runs roughly down the center: Moscow→Oka→Tula→Lipetsk→Voronezh→Bugaevka→Rostov
-            Location::Moscow =>              (36, 0),
-            Location::Rublevo =>             (16, 3),
-            Location::OkaRiver =>            (40, 7),
-            Location::Kaluga =>              (6, 11),
-            Location::Tula =>                (30, 13),
+            Location::Moscow =>              (39, 0),
+            Location::Rublevo =>             (19, 3),
+            Location::OkaRiver =>            (43, 7),
+            Location::Kaluga =>              (9, 11),
+            Location::Tula =>                (33, 13),
             Location::Ryazan =>              (54, 11),
-            Location::Orel =>                (6, 20),
-            Location::Lipetsk =>             (30, 20),
+            Location::Orel =>                (9, 20),
+            Location::Lipetsk =>             (33, 20),
             Location::Tambov =>              (54, 20),
-            Location::Voronezh =>            (30, 27),
-            Location::BugaevkaBorderPoint => (30, 34),
-            Location::RostovOnDon =>         (22, 41),
+            Location::Voronezh =>            (33, 27),
+            Location::BugaevkaBorderPoint => (33, 34),
+            Location::RostovOnDon =>         (25, 41),
             Location::GroznyAkhmatBase =>    (52, 43),
         }
     }
