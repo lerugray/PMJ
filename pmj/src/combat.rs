@@ -89,6 +89,9 @@ pub fn lookup_crt(die_roll: i32, cd_column: i32) -> CrtResult {
 /// Force Ratio Column Shift (rulebook 6.2.3.1).
 /// Returns column shifts: negative = left (bad for attacker), positive = right (good).
 pub fn force_ratio_shift(attack_sp: i32, defend_sp: i32) -> i32 {
+    if attack_sp <= 0 {
+        return -3; // Max left shift (attacker has no strength)
+    }
     if defend_sp <= 0 {
         return 3; // Max right shift
     }

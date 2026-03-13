@@ -469,7 +469,11 @@ impl GameState {
             if neighbor == primary_loc {
                 continue; // Primary attack location doesn't count
             }
-            if !self.wagner_units_at(neighbor).is_empty() {
+            // Only count locations with non-police Wagner combat units
+            let has_combat_unit = self.wagner_units_at(neighbor)
+                .iter()
+                .any(|&i| !self.units[i].police);
+            if has_combat_unit {
                 count += 1;
             }
         }
@@ -1071,13 +1075,17 @@ impl GameState {
                     continue;
                 }
 
-                // Find an empty roadblock slot
+                // Find an empty roadblock slot, or reposition if both filled
                 if self.roadblocks[0].is_none() {
                     self.roadblocks[0] = Some(loc);
                     self.record(format!("Roadblock 1 deployed at {}.", loc.name()));
                     break;
-                } else if self.roadblocks[1].is_some() {
-                    // Second roadblock available — can reposition
+                } else if self.roadblocks[1].is_none() {
+                    self.roadblocks[1] = Some(loc);
+                    self.record(format!("Roadblock 2 deployed at {}.", loc.name()));
+                    break;
+                } else {
+                    // Both slots filled — reposition roadblock 2
                     let old = self.roadblocks[1].unwrap();
                     if old != loc {
                         self.roadblocks[1] = Some(loc);
@@ -1089,7 +1097,6 @@ impl GameState {
                     }
                     break;
                 }
-                break;
             }
         }
     }

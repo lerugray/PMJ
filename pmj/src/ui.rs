@@ -1222,13 +1222,15 @@ fn draw_move_unit_menu(f: &mut Frame, game: &GameState, area: Rect) {
             if unit.is_on_map() {
                 let mp_rem = game.mp_remaining(idx);
                 let sp = game.effective_sp(idx);
+                let exhausted = if mp_rem == 0 { " [NO MP]" } else { "" };
                 labels.push(format!(
-                    "{} SP:{} MP:{}/{} @ {}",
+                    "{} SP:{} MP:{}/{} @ {}{}",
                     id.name(),
                     sp,
                     mp_rem,
                     game.effective_mp(idx),
-                    unit.location.unwrap().name()
+                    unit.location.unwrap().name(),
+                    exhausted
                 ));
             }
         }
@@ -1241,13 +1243,15 @@ fn draw_move_unit_menu(f: &mut Frame, game: &GameState, area: Rect) {
         {
             if let Some(idx) = game.unit_index(unit.id) {
                 let mp_rem = game.mp_remaining(idx);
+                let exhausted = if mp_rem == 0 { " [NO MP]" } else { "" };
                 labels.push(format!(
-                    "{} SP:{} MP:{}/{} @ {}",
+                    "{} SP:{} MP:{}/{} @ {}{}",
                     unit.id.name(),
                     game.effective_sp(idx),
                     mp_rem,
                     game.effective_mp(idx),
-                    unit.location.unwrap().name()
+                    unit.location.unwrap().name(),
+                    exhausted
                 ));
             }
         }

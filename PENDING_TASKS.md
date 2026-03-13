@@ -62,6 +62,14 @@
 - [x] Move list stabilization — tiebreaker sort prevents flickering
 - [x] Cursor-based map highlighting — selected unit/destination/target lights up on map (white on blue)
 
-## Phase 8: Remaining — TODO
+## Phase 8: Code Review Bug Fixes — COMPLETE
+- [x] Roadblock deployment — second slot never filled (is_some/is_none inversion)
+- [x] Flanking excluded police units (OMON/MOSpol can't attack)
+- [x] Division by zero guard in force_ratio_shift
+- [x] Tab unit detail flashes message on failure
+- [x] Post-combat cursor returns to Contact menu
+- [x] [NO MP] indicator in move unit list
+
+## Phase 9: Remaining — TODO
 - [ ] Playtest a full game to verify flow and map rendering
 - [ ] Sound or flash on combat results (if terminal supports it)

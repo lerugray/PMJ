@@ -329,6 +329,7 @@ fn open_unit_detail(game: &mut GameState) {
             }
         }
     }
+    game.flash_message("No units on map.");
 }
 
 // ── Help Screen ──────────────────────────────────────────────────────────
@@ -621,7 +622,7 @@ fn return_or_attack_again(game: &mut GameState) {
         enter_contact_flow(game);
     } else {
         game.screen = Screen::PhaseMenu;
-        game.cursor = 0;
+        game.cursor = 1; // Return to Contact option (just finished combat)
     }
 }
 
