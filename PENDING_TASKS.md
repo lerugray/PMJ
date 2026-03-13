@@ -47,7 +47,13 @@
 - [x] Unit detail returns to correct screen (not always PhaseMenu)
 - [x] Status flash messages for feedback (save, no contact, etc.)
 
-## Phase 6: Features — IN PROGRESS
+## Phase 6: Features & Map Polish — COMPLETE
 - [x] Save/load game state (Ctrl+S save, L on title to load, single slot)
-- [ ] Map position fine-tuning after playtesting
+- [x] M4 road visibility fix (spread positions, tighten skip zones)
+- [x] Map centered in panel (shifted right ~4 columns)
+- [x] Location indicators (Rublevo ⌂⌂⌂ suburbs, Moscow ⬤ capital, Rostov HQ, Grozny ⚑ base)
+- [x] Bugaevka name shortened to "Bugaevka B.P."
+
+## Phase 7: Remaining — TODO
+- [ ] Map fine-tuning after playtesting
 - [ ] Sound or flash on combat results (if terminal supports it)
