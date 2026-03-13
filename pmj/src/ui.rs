@@ -231,7 +231,7 @@ fn draw_map_panel(f: &mut Frame, game: &GameState, area: Rect) {
                         Span::styled("│", label_style),
                         Span::styled(display_name, label_style),
                         Span::styled("│", label_style),
-                        Span::styled(" ▲▲▲", Style::default().fg(Color::Rgb(180, 170, 130))),
+                        Span::styled(" ⌂⌂⌂", Style::default().fg(Color::Rgb(180, 170, 130))),
                     ]
                 }
                 Location::GroznyAkhmatBase => {
