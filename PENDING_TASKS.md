@@ -33,6 +33,23 @@
 - [x] Continuous movement — stay in move mode until MP exhausted or Esc
 - [x] Global ? help and Q quit from any screen
 - [x] Contextual phase guides — rules explanations on every major screen
+- [x] M4 route prominent display (● bold cyan)
+- [x] Roadblock visible (▓BLOCK▓ on orange)
+- [x] Map legend (M4/river/road/roadblock)
+- [x] Bresenham line centering + bounding box skip
+- [x] Roster expanded to show all units
+
+## Phase 5: UX Flow Improvements — TODO
+- [ ] Auto-skip contact screens when only one option (1 location, 1 target)
+- [ ] Tab unit detail available from more screens (not just phase menu)
+- [ ] After contact, option to attack again instead of returning to phase menu
+- [ ] Movement Esc goes to PhaseMenu directly (already moved, no need to re-select)
 - [ ] Map position fine-tuning after playtesting
-- [ ] Sound or flash on combat results (if terminal supports it)
+
+## Phase 6: Features — TODO
 - [ ] Save/load game state
+- [ ] Sound or flash on combat results (if terminal supports it)
+
+## Uncommitted changes (need to commit + push)
+- map.rs: Grozny name shortened
+- ui.rs: M4 display, roadblock, Bresenham fixes, roster, GUIDE color, legend

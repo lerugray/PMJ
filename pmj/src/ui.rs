@@ -23,6 +23,7 @@ const ROAD_COLOR: Color = Color::Rgb(140, 140, 100);     // Regular road
 const LOC_COLOR: Color = Color::Rgb(220, 200, 140);      // Location box color
 const HIGHLIGHT: Color = Color::Yellow;
 const DIM: Color = Color::DarkGray;
+const GUIDE: Color = Color::Rgb(110, 110, 120);           // Guide text (brighter than DIM)
 const MOMENTUM_POS: Color = Color::Rgb(50, 200, 50);     // Green
 const MOMENTUM_NEG: Color = Color::Rgb(200, 50, 50);     // Red
 
@@ -64,7 +65,7 @@ fn draw_map_panel(f: &mut Frame, game: &GameState, area: Rect) {
         let (ax, ay) = a.map_pos();
         let (bx, by) = b.map_pos();
         let style = if props.m4 {
-            Style::default().fg(M4_COLOR)
+            Style::default().fg(M4_COLOR).add_modifier(Modifier::BOLD)
         } else if props.river {
             Style::default().fg(RIVER_COLOR)
         } else {
@@ -72,35 +73,45 @@ fn draw_map_panel(f: &mut Frame, game: &GameState, area: Rect) {
         };
 
         // Choose line character based on edge type
+        // M4 uses ● (filled circle) — thick and unmistakable as the victory route
         let base_ch = if props.m4 && props.river {
-            '≈'
+            '●'  // M4 + river: still show M4 prominently
         } else if props.m4 {
-            '·'
+            '●'
         } else if props.river {
             '~'
         } else {
             '·'
         };
 
-        // Bresenham line between the two node centers (+5 to center on wider labels)
-        let points = bresenham_line(ax as i32 + 5, ay as i32 + 1, bx as i32 + 5, by as i32 + 1);
+        // Center of each label box (half the name width + 1 for border)
+        let a_name = a.name();
+        let a_hw = (a_name.len().min(14) as i32 + 2) / 2;
+        let b_name = b.name();
+        let b_hw = (b_name.len().min(14) as i32 + 2) / 2;
+
+        // Bresenham line between the two node centers
+        let points = bresenham_line(ax as i32 + a_hw, ay as i32 + 1, bx as i32 + b_hw, by as i32 + 1);
         for (px, py) in &points {
             let x = *px as u16;
             let y = *py as u16;
-            // Skip points too close to either node (within 6 chars of label box)
-            let da = ((x as i32 - ax as i32 - 5).abs()).max((y as i32 - ay as i32 - 1).abs());
-            let db = ((x as i32 - bx as i32 - 5).abs()).max((y as i32 - by as i32 - 1).abs());
-            if da < 6 || db < 6 {
+            // Skip points inside or very close to either label box
+            // Box is: x in [ax..ax+width], y in [ay..ay+3], plus 1 char margin
+            let a_w = (a_name.len().min(14) as i32) + 2;
+            let in_a = (x as i32) >= ax as i32 - 1
+                && (x as i32) <= ax as i32 + a_w
+                && (y as i32) >= ay as i32 - 1
+                && (y as i32) <= ay as i32 + 4;
+            let b_w = (b_name.len().min(14) as i32) + 2;
+            let in_b = (x as i32) >= bx as i32 - 1
+                && (x as i32) <= bx as i32 + b_w
+                && (y as i32) >= by as i32 - 1
+                && (y as i32) <= by as i32 + 4;
+            if in_a || in_b {
                 continue;
             }
             if x < inner.width && y < inner.height {
-                // Pick directional char based on slope at this point
-                let ch = if props.m4 || props.river {
-                    base_ch
-                } else {
-                    base_ch
-                };
-                let span = Span::styled(ch.to_string(), style);
+                let span = Span::styled(base_ch.to_string(), style);
                 let p = Paragraph::new(Line::from(span));
                 f.render_widget(p, Rect::new(inner.x + x, inner.y + y, 1, 1));
             }
@@ -108,7 +119,7 @@ fn draw_map_panel(f: &mut Frame, game: &GameState, area: Rect) {
 
         // Add river marker '~' at midpoint for river crossings (extra visual cue)
         if props.river {
-            let mx = ((ax + bx) / 2) as u16 + 1;
+            let mx = ((ax as i32 + a_hw + bx as i32 + b_hw) / 2) as u16;
             let my = ((ay + by) / 2) as u16;
             if mx < inner.width && my < inner.height {
                 let span = Span::styled(
@@ -239,12 +250,15 @@ fn draw_map_panel(f: &mut Frame, game: &GameState, area: Rect) {
             ));
         }
 
-        // Add roadblock indicator
+        // Add roadblock indicator — wide and visible
         let has_roadblock = game.roadblocks[0] == Some(*loc) || game.roadblocks[1] == Some(*loc);
         if has_roadblock {
             unit_line.push(Span::styled(
-                "⊘ ",
-                Style::default().fg(Color::Rgb(255, 140, 0)).add_modifier(Modifier::BOLD),
+                "▓BLOCK▓",
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(Color::Rgb(255, 140, 0))
+                    .add_modifier(Modifier::BOLD),
             ));
         }
 
@@ -257,6 +271,25 @@ fn draw_map_panel(f: &mut Frame, game: &GameState, area: Rect) {
             );
         }
     }
+
+    // Map legend at bottom
+    if inner.height > 2 {
+        let legend = Line::from(vec![
+            Span::styled(" ●", Style::default().fg(M4_COLOR).add_modifier(Modifier::BOLD)),
+            Span::styled(" M4 (victory route) ", Style::default().fg(GUIDE)),
+            Span::styled(" ~", Style::default().fg(RIVER_COLOR)),
+            Span::styled(" River (+1 MP) ", Style::default().fg(GUIDE)),
+            Span::styled(" ·", Style::default().fg(ROAD_COLOR)),
+            Span::styled(" Road ", Style::default().fg(GUIDE)),
+            Span::styled(" ▓BLOCK▓", Style::default().fg(Color::Black).bg(Color::Rgb(255, 140, 0))),
+            Span::styled(" Roadblock", Style::default().fg(GUIDE)),
+        ]);
+        let legend_y = inner.y + inner.height - 1;
+        f.render_widget(
+            Paragraph::new(legend),
+            Rect::new(inner.x, legend_y, inner.width, 1),
+        );
+    }
 }
 
 // ── Right Panel ──────────────────────────────────────────────────────────
@@ -265,12 +298,12 @@ fn draw_right_panel(f: &mut Frame, game: &GameState, area: Rect) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),  // Turn/Phase header
-            Constraint::Length(3),  // Momentum bar
-            Constraint::Length(8),  // MCT display
-            Constraint::Length(9),  // Unit roster
-            Constraint::Min(8),    // Menu / Content area
-            Constraint::Length(6), // Log tail
+            Constraint::Length(3),   // Turn/Phase header
+            Constraint::Length(3),   // Momentum bar
+            Constraint::Length(8),   // MCT display
+            Constraint::Length(12),  // Unit roster (fits all 9 Russian + 3 Wagner)
+            Constraint::Min(8),      // Menu / Content area
+            Constraint::Length(5),   // Log tail
         ])
         .split(area);
 
@@ -939,14 +972,14 @@ fn draw_mct_select_menu(f: &mut Frame, game: &GameState, area: Rect) {
     ] {
         items.push(ListItem::new(Line::from(Span::styled(
             format!("  {}", line),
-            Style::default().fg(DIM),
+            Style::default().fg(GUIDE),
         ))));
     }
 
     items.push(ListItem::new(Line::from("")));
     items.push(ListItem::new(Line::from(Span::styled(
         "  ↑↓ Navigate  Enter Select  ? Help  Q Quit",
-        Style::default().fg(DIM),
+        Style::default().fg(GUIDE),
     ))));
 
     let block = Block::default()
@@ -1001,14 +1034,14 @@ fn draw_phase_menu(f: &mut Frame, game: &GameState, area: Rect) {
     ] {
         items.push(ListItem::new(Line::from(Span::styled(
             format!("  {}", line),
-            Style::default().fg(DIM),
+            Style::default().fg(GUIDE),
         ))));
     }
 
     items.push(ListItem::new(Line::from("")));
     items.push(ListItem::new(Line::from(Span::styled(
         "  ? Help   Tab Unit Info   Q Quit",
-        Style::default().fg(DIM),
+        Style::default().fg(GUIDE),
     ))));
     let list = List::new(items).block(block);
     f.render_widget(list, area);
@@ -1080,7 +1113,7 @@ fn draw_move_unit_menu(f: &mut Frame, game: &GameState, area: Rect) {
     ] {
         items.push(ListItem::new(Line::from(Span::styled(
             format!("  {}", line),
-            Style::default().fg(DIM),
+            Style::default().fg(GUIDE),
         ))));
     }
 
@@ -1131,7 +1164,7 @@ fn draw_move_dest_menu(f: &mut Frame, game: &GameState, area: Rect, unit_idx: us
     items.push(ListItem::new(Line::from("")));
     items.push(ListItem::new(Line::from(Span::styled(
         "  ✗ = not enough MP   Esc/Back = done moving",
-        Style::default().fg(DIM),
+        Style::default().fg(GUIDE),
     ))));
 
     let list = List::new(items).block(block);
@@ -1184,7 +1217,7 @@ fn draw_contact_loc_menu(f: &mut Frame, game: &GameState, area: Rect) {
     ] {
         items.push(ListItem::new(Line::from(Span::styled(
             format!("  {}", line),
-            Style::default().fg(DIM),
+            Style::default().fg(GUIDE),
         ))));
     }
 
@@ -1490,7 +1523,7 @@ fn draw_russian_phase(f: &mut Frame, game: &GameState, area: Rect) {
         "  if Wagner has high Momentum.",
     ] {
         lines.push(Line::from(Span::styled(
-            text, Style::default().fg(DIM),
+            text, Style::default().fg(GUIDE),
         )));
     }
 
@@ -1540,7 +1573,7 @@ fn draw_end_turn(f: &mut Frame, game: &GameState, area: Rect) {
         "  Negative = Russian advantage",
     ] {
         lines.push(Line::from(Span::styled(
-            text, Style::default().fg(DIM),
+            text, Style::default().fg(GUIDE),
         )));
     }
 

@@ -25,7 +25,7 @@ impl Location {
     pub fn name(&self) -> &'static str {
         match self {
             Location::RostovOnDon => "Rostov-On-Don",
-            Location::GroznyAkhmatBase => "Grozny Akhmat Base",
+            Location::GroznyAkhmatBase => "Grozny",
             Location::BugaevkaBorderPoint => "Bugaevka Border Pt",
             Location::Voronezh => "Voronezh",
             Location::Orel => "Orel",
