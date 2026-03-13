@@ -27,15 +27,39 @@ const GUIDE: Color = Color::Rgb(110, 110, 120);           // Guide text (brighte
 const MOMENTUM_POS: Color = Color::Rgb(50, 200, 50);     // Green
 const MOMENTUM_NEG: Color = Color::Rgb(200, 50, 50);     // Red
 
+/// Minimum terminal size for playable rendering.
+const MIN_COLS: u16 = 100;
+const MIN_ROWS: u16 = 40;
+
 /// Main render function — dispatches based on current screen.
 pub fn draw(f: &mut Frame, game: &GameState) {
-    // Title and Game Over screens are full-width
+    let area = f.area();
+
+    // Title and Game Over screens are full-width (work at any size)
     if matches!(game.screen, Screen::Title) {
-        draw_title(f, f.area(), game.frame_count);
+        draw_title(f, area, game.frame_count);
         return;
     }
     if let Screen::GameOver { wagner_wins } = game.screen {
-        draw_game_over(f, f.area(), wagner_wins);
+        draw_game_over(f, area, wagner_wins);
+        return;
+    }
+
+    // Check minimum terminal size for game screens
+    if area.width < MIN_COLS || area.height < MIN_ROWS {
+        let msg = format!(
+            "Terminal too small: {}x{}. Need at least {}x{}.\nResize your terminal or maximize the window.",
+            area.width, area.height, MIN_COLS, MIN_ROWS
+        );
+        let p = Paragraph::new(msg)
+            .style(Style::default().fg(HIGHLIGHT))
+            .alignment(Alignment::Center)
+            .wrap(Wrap { trim: false });
+        let block = Block::default()
+            .title(" RESIZE TERMINAL ")
+            .title_style(Style::default().fg(WAGNER_COLOR).add_modifier(Modifier::BOLD))
+            .borders(Borders::ALL);
+        f.render_widget(p.block(block), area);
         return;
     }
 
@@ -43,7 +67,7 @@ pub fn draw(f: &mut Frame, game: &GameState) {
     let outer = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
-        .split(f.area());
+        .split(area);
 
     draw_map_panel(f, game, outer[0]);
     draw_right_panel(f, game, outer[1]);
@@ -60,9 +84,21 @@ fn draw_map_panel(f: &mut Frame, game: &GameState, area: Rect) {
     let inner = block.inner(area);
     f.render_widget(block, area);
 
-    // Dynamic horizontal centering: map content spans ~x=9..62, center it in the panel
-    let map_content_width: u16 = 64; // approximate width the positions were designed for
-    let x_off = inner.width.saturating_sub(map_content_width) / 2;
+    // Dynamic horizontal centering: compute actual content bounds and center
+    let mut min_x = u16::MAX;
+    let mut max_x = 0u16;
+    for loc in Location::all() {
+        let (lx, _) = loc.map_pos();
+        let box_w = loc.name().len().min(14) as u16 + 2;
+        if lx < min_x { min_x = lx; }
+        if lx + box_w > max_x { max_x = lx + box_w; }
+    }
+    let content_w = max_x - min_x;
+    let x_off = if inner.width > content_w {
+        (inner.width - content_w) / 2 - min_x.min((inner.width - content_w) / 2)
+    } else {
+        0
+    };
 
     // Draw edges as lines between locations using Bresenham's algorithm
     for (a, b, props) in game.map.all_edges() {
