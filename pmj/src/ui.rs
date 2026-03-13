@@ -211,16 +211,21 @@ fn draw_map_panel(f: &mut Frame, game: &GameState, area: Rect) {
             None
         };
 
-    // Which location is the cursor currently pointing at? (for map highlighting)
-    let cursor_loc: Option<Location> = match &game.screen {
+    // Which unit index is the cursor pointing at? (for unit counter highlighting)
+    let cursor_unit: Option<usize> = match &game.screen {
         Screen::MoveSelectUnit => {
             let indices = game.moveable_unit_indices();
             if game.cursor < indices.len() {
-                game.units[indices[game.cursor]].location
+                Some(indices[game.cursor])
             } else {
                 None
             }
         }
+        _ => None,
+    };
+
+    // Which location is the cursor currently pointing at? (for map highlighting)
+    let cursor_loc: Option<Location> = match &game.screen {
         Screen::MoveSelectDest(unit_idx) => {
             let reachable = game.reachable_locations(*unit_idx);
             if game.cursor < reachable.len() {
@@ -367,13 +372,24 @@ fn draw_map_panel(f: &mut Frame, game: &GameState, area: Rect) {
         for &idx in &wagner_here {
             let u = &game.units[idx];
             let sp = game.effective_sp(idx);
-            let fg = if u.is_reduced { Color::Rgb(160, 40, 40) } else { WAGNER_COLOR };
-            unit_line.push(Span::styled("▐", Style::default().fg(fg)));
+            let is_selected = cursor_unit == Some(idx);
+            let fg = if is_selected {
+                Color::White
+            } else if u.is_reduced {
+                Color::Rgb(160, 40, 40)
+            } else {
+                WAGNER_COLOR
+            };
+            let bg = if is_selected { HIGHLIGHT } else { fg };
+            if is_selected {
+                unit_line.push(Span::styled("►", Style::default().fg(HIGHLIGHT).add_modifier(Modifier::BOLD)));
+            }
+            unit_line.push(Span::styled("▐", Style::default().fg(bg)));
             unit_line.push(Span::styled(
                 u.id.nato_symbol().to_string(),
-                Style::default().fg(Color::White).bg(fg),
+                Style::default().fg(Color::White).bg(bg),
             ));
-            unit_line.push(Span::styled("▌", Style::default().fg(fg)));
+            unit_line.push(Span::styled("▌", Style::default().fg(bg)));
             unit_line.push(Span::styled(
                 format!("{} ", sp),
                 Style::default().fg(fg),
