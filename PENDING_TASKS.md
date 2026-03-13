@@ -60,7 +60,7 @@
 - [x] Multi-hop movement — destination picker shows all reachable locations within MP (Dijkstra pathfinding)
 - [x] River visuals — hardcoded ≈ arcs on location box sides matching board map
 - [x] Move list stabilization — tiebreaker sort prevents flickering
-- [x] Cursor-based map highlighting — selected destination/target lights up on map (white on blue)
+- [x] Cursor-based map highlighting — selected unit/destination/target lights up on map (white on blue)
 
 ## Phase 8: Remaining — TODO
 - [ ] Playtest a full game to verify flow and map rendering

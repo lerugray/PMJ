@@ -213,6 +213,14 @@ fn draw_map_panel(f: &mut Frame, game: &GameState, area: Rect) {
 
     // Which location is the cursor currently pointing at? (for map highlighting)
     let cursor_loc: Option<Location> = match &game.screen {
+        Screen::MoveSelectUnit => {
+            let indices = game.moveable_unit_indices();
+            if game.cursor < indices.len() {
+                game.units[indices[game.cursor]].location
+            } else {
+                None
+            }
+        }
         Screen::MoveSelectDest(unit_idx) => {
             let reachable = game.reachable_locations(*unit_idx);
             if game.cursor < reachable.len() {

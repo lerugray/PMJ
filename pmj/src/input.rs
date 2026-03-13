@@ -349,27 +349,8 @@ fn handle_help_screen(game: &mut GameState, key: KeyEvent) {
 
 // ── Move Unit ────────────────────────────────────────────────────────────
 
-fn moveable_unit_indices(game: &GameState) -> Vec<usize> {
-    let mut indices = Vec::new();
-    // Core Wagner units first
-    for id in UnitId::wagner_units() {
-        if let Some(idx) = game.unit_index(*id) {
-            if game.units[idx].is_on_map() && game.units[idx].is_wagner() {
-                indices.push(idx);
-            }
-        }
-    }
-    // Switched units
-    for (idx, unit) in game.units.iter().enumerate() {
-        if unit.is_wagner() && unit.is_on_map() && !unit.id.is_wagner() {
-            indices.push(idx);
-        }
-    }
-    indices
-}
-
 fn handle_move_select_unit(game: &mut GameState, key: KeyEvent) {
-    let unit_indices = moveable_unit_indices(game);
+    let unit_indices = game.moveable_unit_indices();
     let count = unit_indices.len() + 1; // +1 for "Back"
 
     match key.code {

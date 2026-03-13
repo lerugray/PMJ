@@ -192,6 +192,24 @@ impl GameState {
             .collect()
     }
 
+    /// Indices of all Wagner units that can be moved (on-map, Wagner side).
+    pub fn moveable_unit_indices(&self) -> Vec<usize> {
+        let mut indices = Vec::new();
+        for id in UnitId::wagner_units() {
+            if let Some(idx) = self.unit_index(*id) {
+                if self.units[idx].is_on_map() && self.units[idx].is_wagner() {
+                    indices.push(idx);
+                }
+            }
+        }
+        for (idx, unit) in self.units.iter().enumerate() {
+            if unit.is_wagner() && unit.is_on_map() && !unit.id.is_wagner() {
+                indices.push(idx);
+            }
+        }
+        indices
+    }
+
     pub fn wagner_units_at(&self, loc: Location) -> Vec<usize> {
         self.units_at(loc)
             .into_iter()
