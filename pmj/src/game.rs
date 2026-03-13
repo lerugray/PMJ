@@ -324,7 +324,9 @@ impl GameState {
             .into_iter()
             .filter(|(loc, _)| *loc != from)
             .collect();
-        result.sort_by_key(|(_, cost)| *cost);
+        result.sort_by(|(loc_a, cost_a), (loc_b, cost_b)| {
+            cost_a.cmp(cost_b).then(loc_a.cmp(loc_b))
+        });
         result
     }
 

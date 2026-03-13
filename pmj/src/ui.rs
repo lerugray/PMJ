@@ -108,20 +108,15 @@ fn draw_map_panel(f: &mut Frame, game: &GameState, area: Rect) {
         let bx = bx_raw + x_off;
         let style = if props.m4 {
             Style::default().fg(M4_COLOR).add_modifier(Modifier::BOLD)
-        } else if props.river {
-            Style::default().fg(RIVER_COLOR)
         } else {
             Style::default().fg(ROAD_COLOR)
         };
 
         // Choose line character based on edge type
         // M4 uses ● (filled circle) — thick and unmistakable as the victory route
-        let base_ch = if props.m4 && props.river {
-            '●'  // M4 + river: still show M4 prominently
-        } else if props.m4 {
+        // Rivers are drawn separately as crossing markers, so road char is used for river edges
+        let base_ch = if props.m4 {
             '●'
-        } else if props.river {
-            '~'
         } else {
             '·'
         };
@@ -159,31 +154,41 @@ fn draw_map_panel(f: &mut Frame, game: &GameState, area: Rect) {
             }
         }
 
-        // Draw river alongside edge — offset by 1 column so it's visible next to the road
-        if props.river {
-            let river_style = Style::default().fg(RIVER_COLOR).add_modifier(Modifier::BOLD);
-            for (px, py) in &points {
-                let rx = (*px + 1) as u16; // offset 1 col to the right
-                let y = *py as u16;
-                // Skip points inside either label box
-                let a_w = (a_name.len().min(14) as i32) + 2;
-                let in_a = (rx as i32) >= ax as i32
-                    && (rx as i32) <= ax as i32 + a_w
-                    && (y as i32) >= ay as i32
-                    && (y as i32) <= ay as i32 + 3;
-                let b_w = (b_name.len().min(14) as i32) + 2;
-                let in_b = (rx as i32) >= bx as i32
-                    && (rx as i32) <= bx as i32 + b_w
-                    && (y as i32) >= by as i32
-                    && (y as i32) <= by as i32 + 3;
-                if in_a || in_b {
-                    continue;
-                }
-                if rx < inner.width && y < inner.height {
-                    let span = Span::styled("≈", river_style);
-                    let p = Paragraph::new(Line::from(span));
-                    f.render_widget(p, Rect::new(inner.x + rx, inner.y + y, 1, 1));
-                }
+    }
+
+    // ── River decorations ───────────────────────────────────────────────
+    // Drawn as ≈ arcs attached to location box sides, matching the board map.
+    // Rivers indicate which connections have the +1 MP crossing penalty.
+    {
+        let river_style = Style::default().fg(RIVER_COLOR).add_modifier(Modifier::BOLD);
+        // Positions in map-local coords (same space as Location::map_pos)
+        let river_points: &[(u16, u16)] = &[
+            // Oka River — bottom of box (Tula + Ryazan river crossings)
+            // Box at (43,7), width 13 → rows 7-9
+            (42, 10), (43, 10), (44, 10), (45, 10), (46, 10), (47, 10),
+            (48, 10), (49, 10), (50, 10), (51, 10), (52, 10), (53, 10), (54, 10), (55, 10),
+            (41, 11), (42, 11),
+
+            // Voronezh — left of box (Orel river crossing)
+            // Box at (33,27), width 10 → rows 27-29
+            (32, 25), (31, 26), (31, 27), (31, 28), (31, 29), (31, 30), (32, 31),
+
+            // Bugaevka — below box, shifted right (Rostov M4 river crossing)
+            // Box at (33,34), width 15 → rows 34-36
+            (35, 37), (36, 37), (37, 37), (38, 37), (39, 37), (40, 37),
+            (41, 37), (42, 37), (43, 37), (44, 37), (45, 37), (46, 37), (47, 37),
+
+            // Rostov ↔ Grozny — vertical river between the two boxes
+            // Rostov at (25,41), Grozny at (52,43)
+            (45, 41), (45, 42), (45, 43), (45, 44), (45, 45),
+            (46, 41), (46, 42), (46, 43), (46, 44), (46, 45),
+        ];
+        for &(cx, cy) in river_points {
+            let x = cx + x_off;
+            if x < inner.width && cy < inner.height {
+                let span = Span::styled("≈", river_style);
+                let p = Paragraph::new(Line::from(span));
+                f.render_widget(p, Rect::new(inner.x + x, inner.y + cy, 1, 1));
             }
         }
     }
@@ -206,6 +211,39 @@ fn draw_map_panel(f: &mut Frame, game: &GameState, area: Rect) {
             None
         };
 
+    // Which location is the cursor currently pointing at? (for map highlighting)
+    let cursor_loc: Option<Location> = match &game.screen {
+        Screen::MoveSelectDest(unit_idx) => {
+            let reachable = game.reachable_locations(*unit_idx);
+            if game.cursor < reachable.len() {
+                Some(reachable[game.cursor].0)
+            } else {
+                None
+            }
+        }
+        Screen::ContactSelectLocation => {
+            let opps = game.contact_opportunities();
+            if game.cursor < opps.len() {
+                Some(opps[game.cursor].0)
+            } else {
+                None
+            }
+        }
+        Screen::ContactSelectTarget { from_loc } => {
+            let opps = game.contact_opportunities();
+            let targets = opps.iter()
+                .find(|(loc, _)| *loc == *from_loc)
+                .map(|(_, t)| t.clone())
+                .unwrap_or_default();
+            if game.cursor < targets.len() {
+                Some(targets[game.cursor])
+            } else {
+                None
+            }
+        }
+        _ => None,
+    };
+
     // Draw location nodes
     for loc in Location::all() {
         let (cx_raw, cy) = loc.map_pos();
@@ -218,23 +256,25 @@ fn draw_map_panel(f: &mut Frame, game: &GameState, area: Rect) {
         let wagner_here = game.wagner_units_at(*loc);
         let russian_here = game.russian_units_at(*loc);
 
-        // Location label (short name) — override color when selecting move destination
-        let label_style = if let Some((from, ref neighbors)) = move_info {
+        // Location label — override color when selecting move destination or contact target
+        let is_cursor_target = cursor_loc == Some(*loc);
+        let label_style = if is_cursor_target {
+            // Cursor is pointing at this location — bright white highlight
+            Style::default()
+                .fg(Color::White)
+                .bg(Color::Rgb(60, 60, 120))
+                .add_modifier(Modifier::BOLD)
+        } else if let Some((from, ref neighbors)) = move_info {
             if *loc == from {
                 // Current unit location — highlight yellow
                 Style::default().fg(HIGHLIGHT).add_modifier(Modifier::BOLD)
-            } else if let Some((_, can_afford)) = neighbors.iter().find(|(n, _)| n == loc) {
-                if *can_afford {
-                    // Valid destination — bright green
-                    Style::default()
-                        .fg(Color::Rgb(50, 220, 50))
-                        .add_modifier(Modifier::BOLD)
-                } else {
-                    // Adjacent but too expensive — dim red
-                    Style::default().fg(Color::Rgb(180, 50, 50))
-                }
+            } else if neighbors.iter().any(|(n, _)| n == loc) {
+                // Reachable destination — bright green
+                Style::default()
+                    .fg(Color::Rgb(50, 220, 50))
+                    .add_modifier(Modifier::BOLD)
             } else {
-                // Not adjacent — dim it out
+                // Not reachable — dim it out
                 Style::default().fg(DIM)
             }
         } else if !wagner_here.is_empty() {
