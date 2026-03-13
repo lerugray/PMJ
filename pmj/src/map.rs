@@ -27,7 +27,7 @@ impl Location {
         match self {
             Location::RostovOnDon => "Rostov-On-Don",
             Location::GroznyAkhmatBase => "Grozny",
-            Location::BugaevkaBorderPoint => "Bugaevka Border Pt",
+            Location::BugaevkaBorderPoint => "Bugaevka B.P.",
             Location::Voronezh => "Voronezh",
             Location::Orel => "Orel",
             Location::Lipetsk => "Lipetsk",
@@ -95,22 +95,25 @@ impl Location {
 
     /// Map display coordinates (col, row) for the TUI map.
     /// These approximate the physical map layout.
+    /// Positions are spread so adjacent M4 locations have ≥7 rows between them,
+    /// ensuring Bresenham road lines are visible between label boxes.
     pub fn map_pos(&self) -> (u16, u16) {
         match self {
-            // (col, row) — origin top-left, spread to fill ~66×40 map panel
-            Location::Moscow =>              (35, 1),
-            Location::Rublevo =>             (18, 3),
-            Location::OkaRiver =>            (40, 5),
-            Location::Kaluga =>              (10, 8),
-            Location::Tula =>                (30, 9),
-            Location::Ryazan =>              (50, 8),
-            Location::Orel =>                (8, 15),
-            Location::Lipetsk =>             (30, 15),
-            Location::Tambov =>              (50, 15),
-            Location::Voronezh =>            (30, 22),
-            Location::BugaevkaBorderPoint => (30, 28),
-            Location::RostovOnDon =>         (24, 34),
-            Location::GroznyAkhmatBase =>    (48, 36),
+            // (col, row) — origin top-left
+            // M4 route runs roughly down the center: Moscow→Oka→Tula→Lipetsk→Voronezh→Bugaevka→Rostov
+            Location::Moscow =>              (32, 0),
+            Location::Rublevo =>             (12, 3),
+            Location::OkaRiver =>            (36, 7),
+            Location::Kaluga =>              (2, 11),
+            Location::Tula =>                (26, 13),
+            Location::Ryazan =>              (50, 11),
+            Location::Orel =>                (2, 20),
+            Location::Lipetsk =>             (26, 20),
+            Location::Tambov =>              (50, 20),
+            Location::Voronezh =>            (26, 27),
+            Location::BugaevkaBorderPoint => (26, 34),
+            Location::RostovOnDon =>         (18, 41),
+            Location::GroznyAkhmatBase =>    (48, 43),
         }
     }
 }

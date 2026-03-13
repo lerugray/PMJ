@@ -95,18 +95,18 @@ fn draw_map_panel(f: &mut Frame, game: &GameState, area: Rect) {
         for (px, py) in &points {
             let x = *px as u16;
             let y = *py as u16;
-            // Skip points inside or very close to either label box
-            // Box is: x in [ax..ax+width], y in [ay..ay+3], plus 1 char margin
+            // Skip points inside either label box (3 rows for box + 1 for unit indicators)
+            // No extra margin so road lines are visible close to boxes
             let a_w = (a_name.len().min(14) as i32) + 2;
-            let in_a = (x as i32) >= ax as i32 - 1
-                && (x as i32) <= ax as i32 + a_w
-                && (y as i32) >= ay as i32 - 1
-                && (y as i32) <= ay as i32 + 4;
+            let in_a = (x as i32) >= ax as i32
+                && (x as i32) <= ax as i32 + a_w - 1
+                && (y as i32) >= ay as i32
+                && (y as i32) <= ay as i32 + 3;
             let b_w = (b_name.len().min(14) as i32) + 2;
-            let in_b = (x as i32) >= bx as i32 - 1
-                && (x as i32) <= bx as i32 + b_w
-                && (y as i32) >= by as i32 - 1
-                && (y as i32) <= by as i32 + 4;
+            let in_b = (x as i32) >= bx as i32
+                && (x as i32) <= bx as i32 + b_w - 1
+                && (y as i32) >= by as i32
+                && (y as i32) <= by as i32 + 3;
             if in_a || in_b {
                 continue;
             }
@@ -159,7 +159,8 @@ fn draw_map_panel(f: &mut Frame, game: &GameState, area: Rect) {
     // Draw location nodes
     for loc in Location::all() {
         let (cx, cy) = loc.map_pos();
-        if cx + 16 >= inner.width || cy + 4 >= inner.height {
+        let loc_name_w = loc.name().len().min(14) as u16 + 2;
+        if cx + loc_name_w >= inner.width || cy + 4 >= inner.height {
             continue;
         }
 
